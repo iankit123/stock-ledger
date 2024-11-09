@@ -4,6 +4,12 @@ import { Edit2, Trash2, ExternalLink } from 'lucide-react';
 import type { StockEntry } from '@/types/ledger';
 import { cn } from "@/lib/utils";
 import useSWR from 'swr';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface StockLedgerEntryProps {
   entry: StockEntry;
@@ -93,6 +99,24 @@ export default function StockLedgerEntry({ entry, onEdit, onDelete }: StockLedge
             Confidence: {entry.confidence}
           </span>
         </div>
+      </td>
+
+      {/* Reason */}
+      <td className="p-4 max-w-[200px]">
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="cursor-help">
+                <p className="text-sm truncate">
+                  {entry.reason}
+                </p>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px] whitespace-pre-wrap">
+              <p className="text-sm">{entry.reason}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </td>
 
       {/* Actions */}

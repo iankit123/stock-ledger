@@ -1,4 +1,3 @@
-// components/StockEntryDialog.tsx
 import { useState } from "react";
 import {
   Dialog,
@@ -26,40 +25,74 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 import type { NewStockEntry } from "@/types/ledger";
 
 interface StockEntryDialogProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (entry: NewStockEntry) => void;
+  onSubmit: (entry: NewStockEntry) => Promise<void>;
+  isLoading?: boolean;
 }
 
-export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntryDialogProps) {
+export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = false }: StockEntryDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; name: string } | null>(null);
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!selectedStock) return;
+    try {
+      if (!selectedStock) {
+        throw new Error('Please select a stock first');
+      }
 
-    const formData = new FormData(e.currentTarget);
+      const formData = new FormData(e.currentTarget);
+      
+      // Validate numeric fields
+      const priceBuy = parseFloat(formData.get('priceBuy') as string);
+      const targetPercent = parseFloat(formData.get('targetPercent') as string);
+      const stopLossPercent = parseFloat(formData.get('stopLossPercent') as string);
 
-    const entry: NewStockEntry = {
-      stockName: selectedStock.name,
-      symbol: selectedStock.symbol,
-      dateBuy: date.toISOString(),
-      priceBuy: parseFloat(formData.get('priceBuy') as string),
-      targetPercent: parseFloat(formData.get('targetPercent') as string),
-      stopLossPercent: parseFloat(formData.get('stopLossPercent') as string),
-      reason: (formData.get('reason') as string).trim(),
-      chartLink: formData.get('chartLink') as string || undefined,
-      confidence: formData.get('confidence') as 'Low' | 'Medium' | 'High',
-    };
+      if (isNaN(priceBuy) || priceBuy <= 0) {
+        throw new Error('Please enter a valid buy price');
+      }
+      if (isNaN(targetPercent) || targetPercent <= 0) {
+        throw new Error('Please enter a valid target percentage');
+      }
+      if (isNaN(stopLossPercent) || stopLossPercent <= 0) {
+        throw new Error('Please enter a valid stop loss percentage');
+      }
 
-    onSubmit(entry);
+      const reason = (formData.get('reason') as string).trim();
+      if (!reason) {
+        throw new Error('Please enter a reason for buying');
+      }
+
+      const entry: NewStockEntry = {
+        stockName: selectedStock.name,
+        symbol: selectedStock.symbol,
+        dateBuy: date.toISOString(),
+        priceBuy,
+        targetPercent,
+        stopLossPercent,
+        reason,
+        chartLink: formData.get('chartLink') as string || undefined,
+        confidence: formData.get('confidence') as 'Low' | 'Medium' | 'High',
+      };
+
+      await onSubmit(entry);
+    } catch (error) {
+      console.error('Form submission error:', error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to add stock entry'
+      });
+    }
   };
 
   const handleStockSelect = (symbol: string, name: string) => {
@@ -124,13 +157,14 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
                 name="priceBuy"
                 type="number"
                 step="0.01"
+                min="0.01"
                 required
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="confidence">Confidence</Label>
-              <Select name="confidence" defaultValue="Medium">
+              <Select name="confidence" defaultValue="Medium" required>
                 <SelectTrigger>
                   <SelectValue placeholder="Select confidence" />
                 </SelectTrigger>
@@ -151,6 +185,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
                 name="targetPercent"
                 type="number"
                 step="0.1"
+                min="0.1"
                 required
               />
             </div>
@@ -162,6 +197,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
                 name="stopLossPercent"
                 type="number"
                 step="0.1"
+                min="0.1"
                 required
               />
             </div>
@@ -173,6 +209,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               id="reason"
               name="reason"
               required
+              placeholder="Enter your reasons for buying this stock"
             />
           </div>
 
@@ -182,15 +219,23 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               id="chartLink"
               name="chartLink"
               type="url"
+              placeholder="https://..."
             />
           </div>
 
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" type="button" onClick={onClose}>
+            <Button variant="outline" type="button" onClick={onClose} disabled={isLoading}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!selectedStock}>
-              Add Entry
+            <Button type="submit" disabled={!selectedStock || isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                'Add Entry'
+              )}
             </Button>
           </div>
         </form>

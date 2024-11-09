@@ -1,3 +1,4 @@
+// Update the handleAddEntry function in StockDashboard.tsx
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
@@ -36,7 +37,7 @@ export default function StockDashboard() {
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to load stock entries",
+          description: err instanceof Error ? err.message : "Failed to load stock entries",
         });
       } finally {
         setIsLoading(false);
@@ -56,11 +57,12 @@ export default function StockDashboard() {
 
   const handleAddEntry = async (newEntry: NewStockEntry) => {
     try {
+      setIsLoading(true);
       const entry = await stockLedgerService.addEntry(newEntry);
       setStockEntries(prev => [entry, ...prev]);
       setShowAddEntry(false);
       toast({
-        title: "Entry Added",
+        title: "Success",
         description: `Added ${entry.stockName} to your ledger`,
       });
     } catch (err) {
@@ -68,8 +70,11 @@ export default function StockDashboard() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to add stock entry",
+        description: err instanceof Error ? err.message : "Failed to add stock entry",
       });
+      throw err; // Re-throw to let the dialog handle the error state
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -86,7 +91,7 @@ export default function StockDashboard() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to delete stock entry",
+        description: err instanceof Error ? err.message : "Failed to delete stock entry",
       });
     }
   };
@@ -106,7 +111,7 @@ export default function StockDashboard() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to update stock entry",
+        description: err instanceof Error ? err.message : "Failed to update stock entry",
       });
     }
   };
@@ -225,6 +230,7 @@ export default function StockDashboard() {
           open={showAddEntry} 
           onClose={() => setShowAddEntry(false)}
           onSubmit={handleAddEntry}
+          isLoading={isLoading}
         />
       )}
     </div>

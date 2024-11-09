@@ -1,14 +1,16 @@
+// pages/StockDashboard.tsx
+
 import { useState } from "react";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card } from "@/components/ui/card";
 import StockSearch from "@/components/StockSearch";
 import StockChart from "@/components/StockChart";
 import StockStats from "@/components/StockStats";
 import LivePrice from "@/components/LivePrice";
 import StockEntryDialog from "@/components/StockEntryDialog";
-import StockLedgerTable from "@/components/StockLedgerTable";
+import StockLedgerEntry from "@/components/StockLedgerEntry";
 import { useToast } from "@/hooks/use-toast";
 import type { StockEntry, NewStockEntry } from "@/types/ledger";
 
@@ -110,25 +112,30 @@ export default function StockDashboard() {
               </Button>
             </div>
 
-            {stockEntries.length === 0 ? (
-              <Card className="p-8">
-                <div className="text-center">
-                  <p className="text-muted-foreground mb-4">
-                    No entries yet. Add your first stock entry.
-                  </p>
-                  <Button onClick={() => setShowAddEntry(true)} variant="secondary">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Your First Entry
-                  </Button>
-                </div>
-              </Card>
-            ) : (
-              <StockLedgerTable
-                entries={stockEntries}
-                onEdit={handleEditEntry}
-                onDelete={handleDeleteEntry}
-              />
-            )}
+            <div className="space-y-4">
+              {stockEntries.length === 0 ? (
+                <Card className="p-8">
+                  <div className="text-center">
+                    <p className="text-muted-foreground mb-4">
+                      No entries yet. Add your first stock entry.
+                    </p>
+                    <Button onClick={() => setShowAddEntry(true)} variant="secondary">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Your First Entry
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                stockEntries.map((entry) => (
+                  <StockLedgerEntry
+                    key={entry.id}
+                    entry={entry}
+                    onEdit={handleEditEntry}
+                    onDelete={handleDeleteEntry}
+                  />
+                ))
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>

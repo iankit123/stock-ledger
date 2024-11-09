@@ -8,7 +8,7 @@ import debounce from "lodash/debounce";
 import useSWR from "swr";
 
 interface StockSearchProps {
-  onSelect: (symbol: string) => void;
+  onSelect: (symbol: string, name: string) => void;
   showForm?: boolean;
   className?: string;
 }
@@ -52,7 +52,10 @@ export default function StockSearch({ onSelect, showForm = true, className }: St
       ? `${symbol}.NS`
       : symbol;
 
-    onSelect(formattedSymbol);
+    // Find the stock data to get the name
+    const stockData = data?.find((stock: any) => stock.symbol === formattedSymbol);
+    onSelect(formattedSymbol, stockData?.name || formattedSymbol);
+    
     // Clear search suggestions
     setDebouncedSearch('');
   };
@@ -115,8 +118,8 @@ export default function StockSearch({ onSelect, showForm = true, className }: St
                 className="p-2 hover:bg-muted rounded-md cursor-pointer"
                 onClick={() => {
                   setSearch(stock.symbol);
-                  setDebouncedSearch(''); // Clear search suggestions
-                  onSelect(stock.symbol);
+                  setDebouncedSearch('');
+                  onSelect(stock.symbol, stock.name); // Pass both symbol and name
                 }}
               >
                 <div className="font-medium">{stock.symbol}</div>

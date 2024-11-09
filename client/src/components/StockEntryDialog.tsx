@@ -54,7 +54,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
       priceBuy: parseFloat(formData.get('priceBuy') as string),
       targetPercent: parseFloat(formData.get('targetPercent') as string),
       stopLossPercent: parseFloat(formData.get('stopLossPercent') as string),
-      reason: formData.get('reason') as string,
+      reason: (formData.get('reason') as string).trim(),
       chartLink: formData.get('chartLink') as string || undefined,
       confidence: formData.get('confidence') as 'Low' | 'Medium' | 'High',
     };
@@ -83,6 +83,11 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               className="w-full"
               showForm={false}
             />
+            {selectedStock && (
+              <p className="text-sm text-muted-foreground">
+                Selected: {selectedStock.name} ({selectedStock.symbol})
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

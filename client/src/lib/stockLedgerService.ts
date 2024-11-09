@@ -51,22 +51,60 @@ function convertFirestoreToStockEntry(id: string, data: DocumentData): StockEntr
   };
 }
 
+// Helper function to validate numeric fields
+function validateNumericField(value: any, fieldName: string): number {
+  const num = Number(value);
+  if (isNaN(num)) {
+    throw new Error(`Invalid ${fieldName}: must be a number`);
+  }
+  return num;
+}
+
 export const stockLedgerService = {
   // Create a new stock entry
   async addEntry(entry: NewStockEntry): Promise<StockEntry> {
     try {
+      // Validate required fields first
+      if (!entry.stockName || !entry.symbol) {
+        throw new Error('Stock name and symbol are required');
+      }
+
+      if (!entry.dateBuy) {
+        throw new Error('Buy date is required');
+      }
+
       // Validate and convert numeric fields
+      const priceBuy = validateNumericField(entry.priceBuy, 'buy price');
+      const targetPercent = validateNumericField(entry.targetPercent, 'target percentage');
+      const stopLossPercent = validateNumericField(entry.stopLossPercent, 'stop loss percentage');
+
+      if (targetPercent <= 0) {
+        throw new Error('Target percentage must be greater than 0');
+      }
+
+      if (stopLossPercent <= 0) {
+        throw new Error('Stop loss percentage must be greater than 0');
+      }
+
+      if (!entry.confidence) {
+        throw new Error('Confidence level is required');
+      }
+
+      if (!entry.reason?.trim()) {
+        throw new Error('Reason for buying is required');
+      }
+
       const validatedEntry = {
-        ...entry,
-        priceBuy: Number(entry.priceBuy),
-        targetPercent: Number(entry.targetPercent),
-        stopLossPercent: Number(entry.stopLossPercent),
+        stockName: entry.stockName.trim(),
+        symbol: entry.symbol.trim(),
         dateBuy: Timestamp.fromDate(new Date(entry.dateBuy)),
-        // Optional fields
-        riskReward: entry.targetPercent && entry.stopLossPercent 
-          ? Number((entry.targetPercent / entry.stopLossPercent).toFixed(2))
-          : undefined,
-        // Add timestamps and status
+        priceBuy,
+        targetPercent,
+        stopLossPercent,
+        reason: entry.reason.trim(),
+        chartLink: entry.chartLink?.trim(),
+        confidence: entry.confidence,
+        riskReward: Number((targetPercent / stopLossPercent).toFixed(2)),
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
         status: 'Active' as const
@@ -74,14 +112,7 @@ export const stockLedgerService = {
 
       // Remove any undefined values
       const cleanedEntry = removeUndefinedValues(validatedEntry);
-
-      // Validate required fields
-      if (!cleanedEntry.stockName || !cleanedEntry.symbol || 
-          isNaN(cleanedEntry.priceBuy) || isNaN(cleanedEntry.targetPercent) || 
-          isNaN(cleanedEntry.stopLossPercent)) {
-        throw new Error('Missing or invalid required fields');
-      }
-
+      
       const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedEntry);
 
       // Convert the entry back to the expected StockEntry type
@@ -95,7 +126,7 @@ export const stockLedgerService = {
       };
     } catch (error) {
       console.error('Error adding stock entry:', error);
-      throw error;
+      throw new Error(error instanceof Error ? error.message : 'Failed to add stock entry to Firebase');
     }
   },
 
@@ -113,7 +144,7 @@ export const stockLedgerService = {
       );
     } catch (error) {
       console.error('Error getting stock entries:', error);
-      throw error;
+      throw new Error(error instanceof Error ? error.message : 'Failed to fetch stock entries from Firebase');
     }
   },
 
@@ -121,22 +152,29 @@ export const stockLedgerService = {
   async updateEntry(id: string, updates: Partial<StockEntry>): Promise<void> {
     try {
       const docRef = doc(db, COLLECTION_NAME, id);
-      const updateData = { ...updates };
+      const updateData: Record<string, any> = { ...updates };
 
-      // Convert dates to Timestamps if present
-      if (updateData.dateBuy) {
-        updateData.dateBuy = Timestamp.fromDate(new Date(updateData.dateBuy));
+      // Validate numeric fields if they exist in the updates
+      if ('priceBuy' in updates) {
+        updateData.priceBuy = validateNumericField(updates.priceBuy, 'buy price');
       }
-      if (updateData.dateSell) {
-        updateData.dateSell = Timestamp.fromDate(new Date(updateData.dateSell));
+      if ('priceSell' in updates) {
+        updateData.priceSell = validateNumericField(updates.priceSell, 'sell price');
+      }
+      if ('targetPercent' in updates) {
+        updateData.targetPercent = validateNumericField(updates.targetPercent, 'target percentage');
+      }
+      if ('stopLossPercent' in updates) {
+        updateData.stopLossPercent = validateNumericField(updates.stopLossPercent, 'stop loss percentage');
       }
 
-      // Convert numeric fields
-      if (updateData.priceBuy) updateData.priceBuy = Number(updateData.priceBuy);
-      if (updateData.priceSell) updateData.priceSell = Number(updateData.priceSell);
-      if (updateData.targetPercent) updateData.targetPercent = Number(updateData.targetPercent);
-      if (updateData.stopLossPercent) updateData.stopLossPercent = Number(updateData.stopLossPercent);
-      if (updateData.profitLoss) updateData.profitLoss = Number(updateData.profitLoss);
+      // Convert dates to Timestamps
+      if (updates.dateBuy) {
+        updateData.dateBuy = Timestamp.fromDate(new Date(updates.dateBuy));
+      }
+      if (updates.dateSell) {
+        updateData.dateSell = Timestamp.fromDate(new Date(updates.dateSell));
+      }
 
       // Add updated timestamp
       updateData.updatedAt = Timestamp.now();
@@ -147,18 +185,21 @@ export const stockLedgerService = {
       await updateDoc(docRef, cleanedUpdates);
     } catch (error) {
       console.error('Error updating stock entry:', error);
-      throw error;
+      throw new Error(error instanceof Error ? error.message : 'Failed to update stock entry in Firebase');
     }
   },
 
   // Delete a stock entry
   async deleteEntry(id: string): Promise<void> {
     try {
+      if (!id) {
+        throw new Error('Entry ID is required for deletion');
+      }
       const docRef = doc(db, COLLECTION_NAME, id);
       await deleteDoc(docRef);
     } catch (error) {
       console.error('Error deleting stock entry:', error);
-      throw error;
+      throw new Error(error instanceof Error ? error.message : 'Failed to delete stock entry from Firebase');
     }
   }
 };

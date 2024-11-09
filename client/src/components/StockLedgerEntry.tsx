@@ -1,3 +1,4 @@
+// Updating only the R/R calculation and display part
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Edit2, Trash2, ExternalLink } from 'lucide-react';
@@ -34,6 +35,9 @@ export default function StockLedgerEntry({ entry, index, onEdit, onDelete }: Sto
   const stopLossPrice = entry.priceBuy * (1 - entry.stopLossPercent / 100);
   const hitTarget = currentPrice ? currentPrice >= targetPrice : false;
   const hitStopLoss = currentPrice ? currentPrice <= stopLossPrice : false;
+
+  // Calculate R/R ratio
+  const riskRewardRatio = (entry.targetPercent / entry.stopLossPercent).toFixed(2);
 
   const formattedCurrency = entry.symbol.endsWith('.NS') ? '₹' : '$';
 
@@ -102,7 +106,7 @@ export default function StockLedgerEntry({ entry, index, onEdit, onDelete }: Sto
       {/* R/R & Confidence */}
       <td className="p-4">
         <div className="flex flex-col">
-          <span>R/R: {entry.riskReward}</span>
+          <span>R/R: {riskRewardRatio}</span>
           <span className="text-sm text-muted-foreground">
             Confidence: {entry.confidence}
           </span>

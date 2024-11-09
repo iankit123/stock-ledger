@@ -5,7 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,  // Add this import
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,6 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
       priceBuy: parseFloat(formData.get('priceBuy') as string),
       targetPercent: parseFloat(formData.get('targetPercent') as string),
       stopLossPercent: parseFloat(formData.get('stopLossPercent') as string),
-      riskReward: parseFloat(formData.get('riskReward') as string),
       reason: formData.get('reason') as string,
       chartLink: formData.get('chartLink') as string || undefined,
       confidence: formData.get('confidence') as 'Low' | 'Medium' | 'High',
@@ -68,7 +67,6 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
   };
 
   return (
-
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
@@ -140,7 +138,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="targetPercent">Target %</Label>
               <Input
@@ -157,17 +155,6 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               <Input
                 id="stopLossPercent"
                 name="stopLossPercent"
-                type="number"
-                step="0.1"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="riskReward">Risk/Reward</Label>
-              <Input
-                id="riskReward"
-                name="riskReward"
                 type="number"
                 step="0.1"
                 required

@@ -8,7 +8,7 @@ export interface StockEntry {
   priceBuy: number;
   targetPercent: number;
   stopLossPercent: number;
-  riskReward: number;
+  riskReward?: number;  // Made optional
   reason: string;
   chartLink?: string;
   confidence: 'Low' | 'Medium' | 'High';
@@ -22,7 +22,10 @@ export interface StockEntry {
   updatedAt: string;
 }
 
-export type NewStockEntry = Omit<StockEntry, 'id' | 'createdAt' | 'updatedAt' | 'status'>;
+export type NewStockEntry = Omit<
+  StockEntry,
+  'id' | 'createdAt' | 'updatedAt' | 'status' | 'riskReward'
+>;
 
 export interface StockPosition {
   entry: StockEntry;

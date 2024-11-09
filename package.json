@@ -49,6 +49,8 @@
     "express": "^4.21.1",
     "express-rate-limit": "^7.4.1",
     "express-session": "^1.18.1",
+    "firebase": "^11.0.1",
+    "firebase-admin": "^12.7.0",
     "input-otp": "^1.2.4",
     "lodash": "^4.17.21",
     "lucide-react": "^0.453.0",

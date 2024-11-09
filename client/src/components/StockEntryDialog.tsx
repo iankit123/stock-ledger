@@ -62,13 +62,8 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
     onSubmit(entry);
   };
 
-  const handleStockSelect = (symbol: string, name?: string) => {
-    // If name is not provided, use the symbol as the name
-    const stockName = name || symbol.replace('.NS', '');
-    setSelectedStock({ 
-      symbol, 
-      name: stockName 
-    });
+  const handleStockSelect = (symbol: string, name: string) => {
+    setSelectedStock({ symbol, name });
   };
 
   return (
@@ -88,11 +83,6 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               className="w-full"
               showForm={false}
             />
-            {selectedStock && (
-              <p className="text-sm text-muted-foreground">
-                Selected: {selectedStock.name} ({selectedStock.symbol})
-              </p>
-            )}
           </div>
 
           <div className="space-y-2">

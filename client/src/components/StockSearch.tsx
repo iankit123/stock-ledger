@@ -8,7 +8,7 @@ import debounce from "lodash/debounce";
 import useSWR from "swr";
 
 interface StockSearchProps {
-  onSelect: (symbol: string, name?: string) => void;
+  onSelect: (symbol: string) => void;
   showForm?: boolean;
   className?: string;
 }
@@ -52,19 +52,15 @@ export default function StockSearch({ onSelect, showForm = true, className }: St
       ? `${symbol}.NS`
       : symbol;
 
-    setDebouncedSearch(''); // Clear suggestions before selection
     onSelect(formattedSymbol);
+    // Clear search suggestions
+    setDebouncedSearch('');
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^A-Za-z0-9.]/g, '').toUpperCase();
     setSearch(value);
     debouncedSetSearch(value);
-  };
-
-  const clearSearch = () => {
-    setSearch('');
-    setDebouncedSearch('');
   };
 
   return (
@@ -118,10 +114,9 @@ export default function StockSearch({ onSelect, showForm = true, className }: St
                 key={stock.symbol}
                 className="p-2 hover:bg-muted rounded-md cursor-pointer"
                 onClick={() => {
-                  setDebouncedSearch(''); // Clear suggestions before selection
                   setSearch(stock.symbol);
-                  onSelect(stock.symbol, stock.name);
-                  clearSearch(); // Clear both states after selection
+                  setDebouncedSearch(''); // Clear search suggestions
+                  onSelect(stock.symbol);
                 }}
               >
                 <div className="font-medium">{stock.symbol}</div>

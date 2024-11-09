@@ -1,3 +1,4 @@
+{/* Previous imports remain the same */}
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -110,7 +111,7 @@ export default function StockDashboard() {
 
             <div className="space-y-4">
               {stockEntries.length === 0 ? (
-                <div className="rounded-lg border p-8">
+                <div className="rounded-lg border bg-muted/50 p-8">
                   <div className="text-center">
                     <p className="text-muted-foreground mb-4">
                       No entries yet. Add your first stock entry.
@@ -122,25 +123,27 @@ export default function StockDashboard() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-lg border">
+                <div className="rounded-lg border overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[800px]">
                       <thead>
                         <tr className="border-b bg-muted/50">
-                          <th className="text-left p-4">Stock</th>
-                          <th className="text-left p-4">Buy Info</th>
-                          <th className="text-right p-4">Current</th>
-                          <th className="text-right p-4">Target/Stop Loss</th>
-                          <th className="text-left p-4">R/R & Confidence</th>
-                          <th className="text-left p-4">Reason</th>
-                          <th className="text-right p-4">Actions</th>
+                          <th className="text-center p-4 w-16 bg-muted/50 font-medium text-muted-foreground">SR No.</th>
+                          <th className="text-left p-4 font-medium text-muted-foreground">Stock</th>
+                          <th className="text-left p-4 font-medium text-muted-foreground">Buy Info</th>
+                          <th className="text-right p-4 font-medium text-muted-foreground">Current</th>
+                          <th className="text-right p-4 font-medium text-muted-foreground">Target/Stop Loss</th>
+                          <th className="text-left p-4 font-medium text-muted-foreground">R/R & Confidence</th>
+                          <th className="text-left p-4 font-medium text-muted-foreground">Reason</th>
+                          <th className="text-right p-4 font-medium text-muted-foreground">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {stockEntries.map((entry) => (
+                        {stockEntries.map((entry, index) => (
                           <StockLedgerEntry
                             key={entry.id}
                             entry={entry}
+                            index={index}
                             onEdit={handleEditEntry}
                             onDelete={handleDeleteEntry}
                           />

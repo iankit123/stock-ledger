@@ -13,11 +13,12 @@ import {
 
 interface StockLedgerEntryProps {
   entry: StockEntry;
+  index: number;
   onEdit: (entry: StockEntry) => void;
   onDelete: (id: string) => void;
 }
 
-export default function StockLedgerEntry({ entry, onEdit, onDelete }: StockLedgerEntryProps) {
+export default function StockLedgerEntry({ entry, index, onEdit, onDelete }: StockLedgerEntryProps) {
   const { data: liveData } = useSWR(
     `/api/stock/${entry.symbol}`,
     {
@@ -38,6 +39,13 @@ export default function StockLedgerEntry({ entry, onEdit, onDelete }: StockLedge
 
   return (
     <tr className="border-b hover:bg-muted/50 transition-colors">
+      {/* Serial Number */}
+      <td className="p-4 text-center w-16 bg-muted/5">
+        <span className="font-medium text-muted-foreground">
+          {index + 1}
+        </span>
+      </td>
+
       {/* Stock Info */}
       <td className="p-4">
         <div className="flex flex-col">

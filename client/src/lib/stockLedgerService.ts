@@ -8,7 +8,8 @@ import {
   query,
   orderBy,
   Timestamp,
-  DocumentData
+  DocumentData,
+  FirestoreError
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { NewStockEntry, StockEntry } from '@/types/ledger';
@@ -28,27 +29,44 @@ function removeUndefinedValues<T extends Record<string, any>>(obj: T): T {
 
 // Helper function to convert Firestore data to StockEntry
 function convertFirestoreToStockEntry(id: string, data: DocumentData): StockEntry {
-  return {
-    id,
-    stockName: data.stockName,
-    symbol: data.symbol,
-    dateBuy: data.dateBuy.toDate().toISOString(),
-    priceBuy: Number(data.priceBuy),
-    targetPercent: Number(data.targetPercent),
-    stopLossPercent: Number(data.stopLossPercent),
-    reason: data.reason,
-    chartLink: data.chartLink,
-    confidence: data.confidence,
-    riskReward: data.riskReward,
-    profitLoss: data.profitLoss ? Number(data.profitLoss) : undefined,
-    hitTarget: data.hitTarget,
-    hitStopLoss: data.hitStopLoss,
-    dateSell: data.dateSell ? data.dateSell.toDate().toISOString() : undefined,
-    priceSell: data.priceSell ? Number(data.priceSell) : undefined,
-    status: data.status,
-    createdAt: data.createdAt.toDate().toISOString(),
-    updatedAt: data.updatedAt.toDate().toISOString()
-  };
+  try {
+    if (!data) {
+      throw new Error('Invalid document data');
+    }
+
+    // Validate required fields
+    const requiredFields = ['stockName', 'symbol', 'dateBuy', 'priceBuy', 'targetPercent', 'stopLossPercent', 'reason', 'confidence', 'status'];
+    for (const field of requiredFields) {
+      if (data[field] === undefined) {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+
+    return {
+      id,
+      stockName: data.stockName,
+      symbol: data.symbol,
+      dateBuy: data.dateBuy.toDate().toISOString(),
+      priceBuy: Number(data.priceBuy),
+      targetPercent: Number(data.targetPercent),
+      stopLossPercent: Number(data.stopLossPercent),
+      reason: data.reason,
+      chartLink: data.chartLink,
+      confidence: data.confidence,
+      riskReward: data.riskReward,
+      profitLoss: data.profitLoss ? Number(data.profitLoss) : undefined,
+      hitTarget: data.hitTarget,
+      hitStopLoss: data.hitStopLoss,
+      dateSell: data.dateSell ? data.dateSell.toDate().toISOString() : undefined,
+      priceSell: data.priceSell ? Number(data.priceSell) : undefined,
+      status: data.status,
+      createdAt: data.createdAt.toDate().toISOString(),
+      updatedAt: data.updatedAt.toDate().toISOString()
+    };
+  } catch (error) {
+    console.error('Error converting Firestore data:', error);
+    throw new Error(`Failed to convert document ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 // Helper function to validate numeric fields
@@ -57,7 +75,34 @@ function validateNumericField(value: any, fieldName: string): number {
   if (isNaN(num)) {
     throw new Error(`Invalid ${fieldName}: must be a number`);
   }
+  if (num <= 0) {
+    throw new Error(`Invalid ${fieldName}: must be greater than 0`);
+  }
   return num;
+}
+
+// Helper function to handle Firestore errors
+function handleFirestoreError(error: unknown, operation: string): never {
+  console.error(`Firestore ${operation} error:`, error);
+  
+  if (error instanceof FirestoreError) {
+    switch (error.code) {
+      case 'permission-denied':
+        throw new Error('You do not have permission to perform this operation');
+      case 'not-found':
+        throw new Error('The requested document was not found');
+      case 'already-exists':
+        throw new Error('A document with the same ID already exists');
+      case 'failed-precondition':
+        throw new Error('Operation failed due to server state');
+      case 'unavailable':
+        throw new Error('Service temporarily unavailable, please try again');
+      default:
+        throw new Error(`Firebase operation failed: ${error.message}`);
+    }
+  }
+
+  throw new Error(`Failed to ${operation}: ${error instanceof Error ? error.message : 'Unknown error'}`);
 }
 
 export const stockLedgerService = {
@@ -65,7 +110,7 @@ export const stockLedgerService = {
   async addEntry(entry: NewStockEntry): Promise<StockEntry> {
     try {
       // Validate required fields first
-      if (!entry.stockName || !entry.symbol) {
+      if (!entry.stockName?.trim() || !entry.symbol?.trim()) {
         throw new Error('Stock name and symbol are required');
       }
 
@@ -77,14 +122,6 @@ export const stockLedgerService = {
       const priceBuy = validateNumericField(entry.priceBuy, 'buy price');
       const targetPercent = validateNumericField(entry.targetPercent, 'target percentage');
       const stopLossPercent = validateNumericField(entry.stopLossPercent, 'stop loss percentage');
-
-      if (targetPercent <= 0) {
-        throw new Error('Target percentage must be greater than 0');
-      }
-
-      if (stopLossPercent <= 0) {
-        throw new Error('Stop loss percentage must be greater than 0');
-      }
 
       if (!entry.confidence) {
         throw new Error('Confidence level is required');
@@ -125,8 +162,7 @@ export const stockLedgerService = {
         updatedAt: validatedEntry.updatedAt.toDate().toISOString()
       };
     } catch (error) {
-      console.error('Error adding stock entry:', error);
-      throw new Error(error instanceof Error ? error.message : 'Failed to add stock entry to Firebase');
+      return handleFirestoreError(error, 'add stock entry');
     }
   },
 
@@ -139,18 +175,30 @@ export const stockLedgerService = {
       );
 
       const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(doc => 
+      const entries = querySnapshot.docs.map(doc => 
         convertFirestoreToStockEntry(doc.id, doc.data())
       );
+
+      // Validate the converted entries
+      entries.forEach(entry => {
+        if (!entry.id || !entry.stockName || !entry.symbol) {
+          throw new Error('Invalid entry data received from Firestore');
+        }
+      });
+
+      return entries;
     } catch (error) {
-      console.error('Error getting stock entries:', error);
-      throw new Error(error instanceof Error ? error.message : 'Failed to fetch stock entries from Firebase');
+      return handleFirestoreError(error, 'fetch stock entries');
     }
   },
 
   // Update a stock entry
   async updateEntry(id: string, updates: Partial<StockEntry>): Promise<void> {
     try {
+      if (!id) {
+        throw new Error('Entry ID is required for update');
+      }
+
       const docRef = doc(db, COLLECTION_NAME, id);
       const updateData: Record<string, any> = { ...updates };
 
@@ -166,6 +214,15 @@ export const stockLedgerService = {
       }
       if ('stopLossPercent' in updates) {
         updateData.stopLossPercent = validateNumericField(updates.stopLossPercent, 'stop loss percentage');
+      }
+
+      // Validate text fields
+      if (updates.reason !== undefined) {
+        const reason = updates.reason.trim();
+        if (!reason) {
+          throw new Error('Reason cannot be empty');
+        }
+        updateData.reason = reason;
       }
 
       // Convert dates to Timestamps
@@ -184,8 +241,7 @@ export const stockLedgerService = {
 
       await updateDoc(docRef, cleanedUpdates);
     } catch (error) {
-      console.error('Error updating stock entry:', error);
-      throw new Error(error instanceof Error ? error.message : 'Failed to update stock entry in Firebase');
+      handleFirestoreError(error, 'update stock entry');
     }
   },
 
@@ -195,11 +251,11 @@ export const stockLedgerService = {
       if (!id) {
         throw new Error('Entry ID is required for deletion');
       }
+
       const docRef = doc(db, COLLECTION_NAME, id);
       await deleteDoc(docRef);
     } catch (error) {
-      console.error('Error deleting stock entry:', error);
-      throw new Error(error instanceof Error ? error.message : 'Failed to delete stock entry from Firebase');
+      handleFirestoreError(error, 'delete stock entry');
     }
   }
 };

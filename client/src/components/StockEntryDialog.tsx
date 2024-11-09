@@ -42,15 +42,22 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; name: string } | null>(null);
   const { toast } = useToast();
 
+  const resetForm = (form: HTMLFormElement) => {
+    form.reset();
+    setSelectedStock(null);
+    setDate(new Date());
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = e.currentTarget;
 
     try {
       if (!selectedStock) {
         throw new Error('Please select a stock first');
       }
 
-      const formData = new FormData(e.currentTarget);
+      const formData = new FormData(form);
       
       // Validate numeric fields
       const priceBuy = parseFloat(formData.get('priceBuy') as string);
@@ -67,9 +74,19 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
         throw new Error('Please enter a valid stop loss percentage');
       }
 
-      const reason = (formData.get('reason') as string).trim();
+      const reason = (formData.get('reason') as string)?.trim();
       if (!reason) {
         throw new Error('Please enter a reason for buying');
+      }
+
+      const chartLink = (formData.get('chartLink') as string)?.trim();
+      if (chartLink && !chartLink.startsWith('http')) {
+        throw new Error('Please enter a valid chart link starting with http:// or https://');
+      }
+
+      const confidence = formData.get('confidence') as 'Low' | 'Medium' | 'High';
+      if (!confidence) {
+        throw new Error('Please select a confidence level');
       }
 
       const entry: NewStockEntry = {
@@ -80,11 +97,14 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
         targetPercent,
         stopLossPercent,
         reason,
-        chartLink: formData.get('chartLink') as string || undefined,
-        confidence: formData.get('confidence') as 'Low' | 'Medium' | 'High',
+        chartLink: chartLink || undefined,
+        confidence,
       };
 
       await onSubmit(entry);
+      // Reset form after successful submission
+      resetForm(form);
+      onClose();
     } catch (error) {
       console.error('Form submission error:', error);
       toast({
@@ -95,12 +115,14 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
     }
   };
 
-  const handleStockSelect = (symbol: string, name: string) => {
-    setSelectedStock({ symbol, name });
+  const handleClose = () => {
+    if (!isLoading) {
+      onClose();
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Stock Entry</DialogTitle>
@@ -112,7 +134,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
           <div className="space-y-2">
             <Label>Select Stock</Label>
             <StockSearch 
-              onSelect={handleStockSelect}
+              onSelect={(symbol, name) => setSelectedStock({ symbol, name })}
               className="w-full"
               showForm={false}
             />
@@ -133,6 +155,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
                     "w-full justify-start text-left font-normal",
                     !date && "text-muted-foreground"
                   )}
+                  disabled={isLoading}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
                   {date ? format(date, "PPP") : <span>Pick a date</span>}
@@ -159,12 +182,13 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
                 step="0.01"
                 min="0.01"
                 required
+                disabled={isLoading}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="confidence">Confidence</Label>
-              <Select name="confidence" defaultValue="Medium" required>
+              <Select name="confidence" defaultValue="Medium" required disabled={isLoading}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select confidence" />
                 </SelectTrigger>
@@ -187,6 +211,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
                 step="0.1"
                 min="0.1"
                 required
+                disabled={isLoading}
               />
             </div>
 
@@ -199,6 +224,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
                 step="0.1"
                 min="0.1"
                 required
+                disabled={isLoading}
               />
             </div>
           </div>
@@ -209,6 +235,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
               id="reason"
               name="reason"
               required
+              disabled={isLoading}
               placeholder="Enter your reasons for buying this stock"
             />
           </div>
@@ -219,12 +246,13 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
               id="chartLink"
               name="chartLink"
               type="url"
+              disabled={isLoading}
               placeholder="https://..."
             />
           </div>
 
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" type="button" onClick={onClose} disabled={isLoading}>
+            <Button variant="outline" type="button" onClick={handleClose} disabled={isLoading}>
               Cancel
             </Button>
             <Button type="submit" disabled={!selectedStock || isLoading}>

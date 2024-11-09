@@ -1,4 +1,3 @@
-// Update the handleAddEntry function in StockDashboard.tsx
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";

@@ -53,6 +53,8 @@ export default function StockSearch({ onSelect, showForm = true, className }: St
       : symbol;
 
     onSelect(formattedSymbol);
+    // Clear search suggestions
+    setDebouncedSearch('');
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,6 +115,7 @@ export default function StockSearch({ onSelect, showForm = true, className }: St
                 className="p-2 hover:bg-muted rounded-md cursor-pointer"
                 onClick={() => {
                   setSearch(stock.symbol);
+                  setDebouncedSearch(''); // Clear search suggestions
                   onSelect(stock.symbol);
                 }}
               >

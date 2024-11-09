@@ -68,7 +68,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Stock Entry</DialogTitle>
           <DialogDescription>

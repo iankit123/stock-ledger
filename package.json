@@ -47,8 +47,10 @@
     "drizzle-zod": "^0.5.1",
     "embla-carousel-react": "^8.3.0",
     "express": "^4.21.1",
+    "express-rate-limit": "^7.4.1",
     "express-session": "^1.18.1",
     "input-otp": "^1.2.4",
+    "lodash": "^4.17.21",
     "lucide-react": "^0.453.0",
     "memorystore": "^1.6.7",
     "passport": "^0.7.0",
@@ -76,14 +78,14 @@
     "@types/passport-local": "^1.0.38",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.2",
+    "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
-    "drizzle-kit": "^0.27.1",
+    "drizzle-kit": "^0.27.2",
     "esbuild": "^0.24.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.19.1",
     "typescript": "5.6.3",
-    "vite": "^5.4.9"
+    "vite": "^5.4.10"
   }
 }

@@ -4,6 +4,10 @@ import { setupVite, serveStatic } from "./vite";
 import { createServer } from "http";
 
 const app = express();
+
+// Enable trust proxy to fix rate limit X-Forwarded-For header issue
+app.set('trust proxy', 1);
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

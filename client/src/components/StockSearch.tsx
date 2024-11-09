@@ -1,103 +1,137 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Loader2 } from "lucide-react";
-import useSWR from "swr";
+import { Search, Loader2, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
+import debounce from "lodash/debounce";
+import useSWR from "swr";
 
 interface StockSearchProps {
   onSelect: (symbol: string) => void;
+  showForm?: boolean;
+  className?: string;
 }
 
-export default function StockSearch({ onSelect }: StockSearchProps) {
+export default function StockSearch({ onSelect, showForm = true, className }: StockSearchProps) {
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const { toast } = useToast();
+
+  const debouncedSetSearch = useCallback(
+    debounce((value: string) => {
+      setDebouncedSearch(value);
+    }, 500),
+    []
+  );
+
   const { data, error, isLoading } = useSWR(
-    search.length >= 1 ? `/api/search?query=${search}` : null,
+    debouncedSearch.length >= 1 ? `/api/search?query=${encodeURIComponent(debouncedSearch)}` : null,
     {
-      dedupingInterval: 2000 // Prevent multiple requests within 2 seconds
+      revalidateOnFocus: false,
+      shouldRetryOnError: false,
+      onError: (err) => {
+        // Don't show toast for rate limit errors
+        if (err.status !== 429) {
+          toast({
+            title: "Search Error",
+            description: err.info?.details || "Failed to search stocks",
+            variant: "destructive",
+          });
+        }
+      }
     }
   );
 
-  const validateSymbol = (symbol: string): { isValid: boolean; error?: string } => {
-    if (!symbol) {
-      return { isValid: false, error: "Please enter a stock symbol" };
-    }
+  const handleSearch = () => {
+    if (!search) return;
 
-    const isIndianStock = /^[0-9]{6}$/.test(symbol) || /^[A-Z]+$/.test(symbol);
-    const isUSStock = /^[A-Z]{1,5}$/.test(symbol);
-
-    if (!isIndianStock && !isUSStock) {
-      return {
-        isValid: false,
-        error: "Invalid symbol format. Use SYMBOL for US stocks or append .NS for Indian stocks"
-      };
-    }
-
-    return { isValid: true };
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
     const symbol = search.toUpperCase();
-    const validation = validateSymbol(symbol);
-
-    if (!validation.isValid) {
-      toast({
-        title: "Invalid Symbol",
-        description: validation.error,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Append .NS for Indian stocks if not already present
-    const formattedSymbol = (/^[0-9]{6}$/.test(symbol) || /^[A-Z]+$/.test(symbol)) && !symbol.endsWith('.NS')
+    const isIndianStock = /^[A-Z\d]+$/i.test(symbol);
+    const formattedSymbol = isIndianStock && !symbol.endsWith('.NS') 
       ? `${symbol}.NS`
       : symbol;
 
     onSelect(formattedSymbol);
-    toast({
-      title: "Stock Selected",
-      description: `Now tracking ${formattedSymbol}`,
-    });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value.replace(/[^A-Za-z0-9.]/g, '').toUpperCase();
     setSearch(value);
+    debouncedSetSearch(value);
   };
 
   return (
-    <div className="space-y-2">
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <div className="flex-1">
-          <Input
-            placeholder="Enter stock symbol (e.g., RELIANCE for NSE, AAPL for US)"
-            value={search}
-            onChange={handleInputChange}
-            className="w-full"
-          />
-          {error?.response?.data?.error && (
-            <p className="text-sm text-destructive mt-1">
-              {error.response.data.details || "Failed to search stocks"}
-            </p>
-          )}
+    <div className={`space-y-2 ${className}`}>
+      {showForm ? (
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <Input
+              type="text"
+              value={search}
+              onChange={handleInputChange}
+              placeholder="Enter stock symbol (e.g., RELIANCE for NSE, AAPL for US)"
+              className="w-full"
+              aria-label="Stock symbol input"
+            />
+          </div>
+          <Button onClick={handleSearch} disabled={isLoading || !search}>
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Search className="h-4 w-4 mr-2" />
+            )}
+            Track
+          </Button>
         </div>
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Search className="h-4 w-4 mr-2" />
-          )}
-          Track
-        </Button>
-      </form>
-      
-      <div className="text-sm text-muted-foreground">
-        <p>• For Indian (NSE) stocks: Enter symbol (e.g., RELIANCE, TCS)</p>
-        <p>• For US stocks: Enter 1-5 letter symbol (e.g., AAPL, MSFT)</p>
-      </div>
+      ) : (
+        <Input
+          type="text"
+          value={search}
+          onChange={handleInputChange}
+          placeholder="Search for a stock..."
+          className="w-full"
+          aria-label="Stock symbol input"
+        />
+      )}
+
+      {error && !isLoading && debouncedSearch && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            {error.info?.details || "Failed to search stocks"}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {data?.length > 0 && !error && !isLoading && (
+        <div className="mt-2 p-2 border rounded-lg bg-background/50 backdrop-blur-sm">
+          <ul className="space-y-1">
+            {data.map((stock: any) => (
+              <li
+                key={stock.symbol}
+                className="p-2 hover:bg-muted rounded-md cursor-pointer"
+                onClick={() => {
+                  setSearch(stock.symbol);
+                  onSelect(stock.symbol);
+                }}
+              >
+                <div className="font-medium">{stock.symbol}</div>
+                <div className="text-sm text-muted-foreground">
+                  {stock.name} • {stock.exchange}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {showForm && (
+        <div className="text-sm text-muted-foreground">
+          <p>• For Indian (NSE) stocks: Enter symbol (e.g., RELIANCE, TCS)</p>
+          <p>• For US stocks: Enter 1-5 letter symbol (e.g., AAPL, MSFT)</p>
+        </div>
+      )}
     </div>
   );
 }

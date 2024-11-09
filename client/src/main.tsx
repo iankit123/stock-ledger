@@ -7,29 +7,35 @@ import { fetcher } from "./lib/fetcher";
 import StockDashboard from "./pages/StockDashboard";
 import { Toaster } from "@/components/ui/toaster";
 
-// SWR configuration with retry logic and exponential backoff
+// SWR configuration with optimized retry logic
 const swrConfig = {
   fetcher,
-  // Retry failed requests up to 3 times
-  errorRetryCount: 3,
-  // Implement exponential backoff for retries
-  errorRetryInterval: (retryCount: number) => Math.min(1000 * 2 ** retryCount, 30000),
-  // Don't retry for 4xx errors, only retry for network/timeout issues
+  // Reduce retries to 2 times
+  errorRetryCount: 2,
+  // Longer retry intervals with exponential backoff
+  errorRetryInterval: (retryCount: number) => Math.min(3000 * 2 ** retryCount, 30000),
+  // Don't retry for client errors or rate limits
   shouldRetryOnError: (err: any) => {
-    return !err.response || err.response.status >= 500;
+    if (!err.response) return true; // Retry network errors
+    const status = err.response.status;
+    // Don't retry 4xx errors or rate limits
+    return status >= 500 && status !== 429;
   },
-  // Revalidate data every 30 seconds
-  refreshInterval: 30000,
-  // Deduplicate requests within 2 seconds
-  dedupingInterval: 2000,
-  // Keep previous data visible while revalidating
+  // Increased deduplication interval
+  dedupingInterval: 3000,
+  // Keep previous data while revalidating
   keepPreviousData: true,
-  // Revalidate on window focus
+  // Reduced revalidation interval
+  refreshInterval: 60000, // 1 minute
+  // Focus revalidation
   revalidateOnFocus: true,
-  // Automatically revalidate after regaining network connection
+  // Network revalidation
   revalidateOnReconnect: true,
-  onError: (error: any) => {
-    console.error("SWR Error:", error);
+  onError: (error: any, key: string) => {
+    // Log errors but prevent console spam
+    if (!error.response?.data?.code?.includes('RATE_LIMIT')) {
+      console.error("SWR Error:", { key, info: error.response?.data || error });
+    }
   }
 };
 

@@ -7,7 +7,7 @@ interface StockStatsProps {
 }
 
 export default function StockStats({ symbol }: StockStatsProps) {
-  const { data, error, isLoading } = useSWR(`/api/stats/${symbol}`);
+  const { data, error, isLoading } = useSWR(`/api/stock/${symbol}`);
 
   if (isLoading) {
     return <Skeleton className="w-full h-32" />;
@@ -17,14 +17,26 @@ export default function StockStats({ symbol }: StockStatsProps) {
     return <div>Error loading statistics</div>;
   }
 
+  const quote = data?.chart?.result?.[0]?.indicators?.quote?.[0];
+  const meta = data?.chart?.result?.[0]?.meta;
+
+  if (!quote || !meta) return null;
+
+  const stats = {
+    open: meta.regularMarketOpen?.toFixed(2),
+    high: meta.regularMarketDayHigh?.toFixed(2),
+    low: meta.regularMarketDayLow?.toFixed(2),
+    volume: meta.regularMarketVolume?.toLocaleString()
+  };
+
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Key Statistics</h2>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard title="Open" value={data.open} />
-        <StatCard title="High" value={data.high} />
-        <StatCard title="Low" value={data.low} />
-        <StatCard title="Volume" value={data.volume} />
+        <StatCard title="Open" value={stats.open} />
+        <StatCard title="High" value={stats.high} />
+        <StatCard title="Low" value={stats.low} />
+        <StatCard title="Volume" value={stats.volume} />
       </div>
     </div>
   );

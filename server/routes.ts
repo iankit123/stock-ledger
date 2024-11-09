@@ -1,51 +1,43 @@
 import type { Express } from "express";
-import { WebSocketServer } from "ws";
-import http from "http";
+import axios from "axios";
 
 export function registerRoutes(app: Express) {
-  const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
-
-  // Mock WebSocket updates
-  wss.on("connection", (ws) => {
-    setInterval(() => {
-      const mockPrice = 150 + Math.random() * 10;
-      ws.send(JSON.stringify({
-        symbol: "AAPL",
-        price: mockPrice
-      }));
-    }, 1000);
+  app.get("/api/stock/:symbol", async (req, res) => {
+    try {
+      const { symbol } = req.params;
+      const response = await axios.get(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,
+        {
+          params: {
+            interval: "1d",
+            range: "1mo"
+          }
+        }
+      );
+      res.json(response.data);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch stock data" });
+    }
   });
 
-  app.get("/api/search", (req, res) => {
-    const { query } = req.query;
-    // Mock search results
-    res.json([
-      { symbol: "AAPL", name: "Apple Inc." },
-      { symbol: "MSFT", name: "Microsoft Corporation" }
-    ]);
+  app.get("/api/search", async (req, res) => {
+    try {
+      const { query } = req.query;
+      const response = await axios.get(
+        `https://query1.finance.yahoo.com/v1/finance/search`,
+        {
+          params: {
+            q: query,
+            quotesCount: 10,
+            lang: "en-US"
+          }
+        }
+      );
+      res.json(response.data.quotes || []);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search stocks" });
+    }
   });
 
-  app.get("/api/history/:symbol", (req, res) => {
-    const { symbol } = req.params;
-    // Mock historical data
-    const data = Array.from({ length: 30 }, (_, i) => ({
-      date: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      price: 150 + Math.random() * 20
-    }));
-    res.json(data);
-  });
-
-  app.get("/api/stats/:symbol", (req, res) => {
-    const { symbol } = req.params;
-    // Mock statistics
-    res.json({
-      open: 150.25,
-      high: 152.50,
-      low: 149.75,
-      volume: 1234567
-    });
-  });
-
-  return server;
+  return app;
 }

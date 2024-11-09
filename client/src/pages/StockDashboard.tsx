@@ -1,7 +1,4 @@
-// pages/StockDashboard.tsx
-
 import { useState } from "react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,7 +52,6 @@ export default function StockDashboard() {
   };
 
   const handleEditEntry = (entry: StockEntry) => {
-    // TODO: Implement edit functionality
     toast({
       title: "Coming Soon",
       description: "Edit functionality will be available soon",
@@ -80,25 +76,25 @@ export default function StockDashboard() {
           </div>
 
           <TabsContent value="live" className="space-y-6 mt-6">
-            <Card className="p-4">
+            <div className="rounded-lg border p-4">
               <StockSearch onSelect={handleSymbolSelect} />
-            </Card>
+            </div>
 
             {selectedSymbol && (
               <>
                 <div className="grid gap-6 md:grid-cols-4">
-                  <Card className="md:col-span-1 p-4">
+                  <div className="md:col-span-1 rounded-lg border p-4">
                     <LivePrice symbol={selectedSymbol} />
-                  </Card>
+                  </div>
 
-                  <Card className="md:col-span-3 p-4">
+                  <div className="md:col-span-3 rounded-lg border p-4">
                     <StockStats symbol={selectedSymbol} />
-                  </Card>
+                  </div>
                 </div>
 
-                <Card className="p-4">
+                <div className="rounded-lg border p-4">
                   <StockChart symbol={selectedSymbol} />
-                </Card>
+                </div>
               </>
             )}
           </TabsContent>
@@ -114,7 +110,7 @@ export default function StockDashboard() {
 
             <div className="space-y-4">
               {stockEntries.length === 0 ? (
-                <Card className="p-8">
+                <div className="rounded-lg border p-8">
                   <div className="text-center">
                     <p className="text-muted-foreground mb-4">
                       No entries yet. Add your first stock entry.
@@ -124,16 +120,34 @@ export default function StockDashboard() {
                       Add Your First Entry
                     </Button>
                   </div>
-                </Card>
+                </div>
               ) : (
-                stockEntries.map((entry) => (
-                  <StockLedgerEntry
-                    key={entry.id}
-                    entry={entry}
-                    onEdit={handleEditEntry}
-                    onDelete={handleDeleteEntry}
-                  />
-                ))
+                <div className="rounded-lg border">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b bg-muted/50">
+                          <th className="text-left p-4">Stock</th>
+                          <th className="text-left p-4">Buy Info</th>
+                          <th className="text-right p-4">Current</th>
+                          <th className="text-right p-4">Target/Stop Loss</th>
+                          <th className="text-left p-4">R/R & Confidence</th>
+                          <th className="text-right p-4">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {stockEntries.map((entry) => (
+                          <StockLedgerEntry
+                            key={entry.id}
+                            entry={entry}
+                            onEdit={handleEditEntry}
+                            onDelete={handleDeleteEntry}
+                          />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </div>
           </TabsContent>

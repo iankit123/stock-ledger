@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { Card } from "@/components/ui/card";
+import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Edit2, Trash2, ExternalLink } from 'lucide-react';
 import type { StockEntry } from '@/types/ledger';
@@ -29,66 +28,89 @@ export default function StockLedgerEntry({ entry, onEdit, onDelete }: StockLedge
   const hitTarget = currentPrice ? currentPrice >= targetPrice : false;
   const hitStopLoss = currentPrice ? currentPrice <= stopLossPrice : false;
 
+  const formattedCurrency = entry.symbol.endsWith('.NS') ? '₹' : '$';
+
   return (
-    <Card className="p-4 hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium text-lg">{entry.stockName}</h3>
-            <span className="text-sm text-muted-foreground">({entry.symbol})</span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Bought on {new Date(entry.dateBuy).toLocaleDateString()} at ₹{entry.priceBuy.toFixed(2)}
-          </p>
+    <tr className="border-b hover:bg-muted/50 transition-colors">
+      {/* Stock Info */}
+      <td className="p-4">
+        <div className="flex flex-col">
+          <span className="font-medium">{entry.stockName}</span>
+          <span className="text-sm text-muted-foreground">{entry.symbol}</span>
         </div>
+      </td>
 
-        <div className="text-right">
-          {currentPrice && (
-            <div className="mb-2">
-              <p className="font-medium">Current: ₹{currentPrice.toFixed(2)}</p>
-              <p className={cn(
-                "text-sm",
-                priceChange && priceChange >= 0 ? "text-green-600" : "text-red-600"
-              )}>
-                {priceChange ? `${priceChange.toFixed(2)}%` : 'Loading...'}
-              </p>
-            </div>
-          )}
-          <div className="flex flex-col gap-1">
-            <div className={cn(
+      {/* Buy Info */}
+      <td className="p-4">
+        <div className="flex flex-col">
+          <span>{new Date(entry.dateBuy).toLocaleDateString()}</span>
+          <span className="text-sm text-muted-foreground">
+            {formattedCurrency}{entry.priceBuy.toFixed(2)}
+          </span>
+        </div>
+      </td>
+
+      {/* Current Price & Change */}
+      <td className="p-4 text-right">
+        {currentPrice ? (
+          <div className="flex flex-col items-end">
+            <span>{formattedCurrency}{currentPrice.toFixed(2)}</span>
+            <span className={cn(
               "text-sm",
-              hitTarget ? "text-green-600 font-medium" : "text-muted-foreground"
+              priceChange && priceChange >= 0 ? "text-green-600" : "text-red-600"
             )}>
-              Target: {entry.targetPercent}% (₹{targetPrice.toFixed(2)})
-            </div>
-            <div className={cn(
-              "text-sm",
-              hitStopLoss ? "text-red-600 font-medium" : "text-muted-foreground"
-            )}>
-              Stop Loss: {entry.stopLossPercent}% (₹{stopLossPrice.toFixed(2)})
-            </div>
+              {priceChange ? `${priceChange.toFixed(2)}%` : 'Loading...'}
+            </span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">Loading...</span>
+        )}
+      </td>
+
+      {/* Target/Stop Loss */}
+      <td className="p-4">
+        <div className="flex flex-col items-end gap-1">
+          <div className={cn(
+            "text-sm",
+            hitTarget ? "text-green-600 font-medium" : "text-muted-foreground"
+          )}>
+            Target: {entry.targetPercent}% ({formattedCurrency}{targetPrice.toFixed(2)})
+          </div>
+          <div className={cn(
+            "text-sm",
+            hitStopLoss ? "text-red-600 font-medium" : "text-muted-foreground"
+          )}>
+            Stop Loss: {entry.stopLossPercent}% ({formattedCurrency}{stopLossPrice.toFixed(2)})
           </div>
         </div>
-      </div>
+      </td>
 
-      <div className="mt-4 flex justify-between items-center">
-        <div className="text-sm text-muted-foreground">
-          R/R: {entry.riskReward} • Confidence: {entry.confidence}
+      {/* R/R & Confidence */}
+      <td className="p-4">
+        <div className="flex flex-col">
+          <span>R/R: {entry.riskReward}</span>
+          <span className="text-sm text-muted-foreground">
+            Confidence: {entry.confidence}
+          </span>
         </div>
-        <div className="flex gap-2">
+      </td>
+
+      {/* Actions */}
+      <td className="p-4">
+        <div className="flex justify-end gap-2">
           {entry.chartLink && (
-            <Button variant="outline" size="sm" onClick={() => window.open(entry.chartLink, '_blank')}>
+            <Button variant="ghost" size="sm" onClick={() => window.open(entry.chartLink, '_blank')}>
               <ExternalLink className="h-4 w-4" />
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => onEdit(entry)}>
+          <Button variant="ghost" size="sm" onClick={() => onEdit(entry)}>
             <Edit2 className="h-4 w-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={() => onDelete(entry.id)}>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(entry.id)}>
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
-      </div>
-    </Card>
+      </td>
+    </tr>
   );
 }

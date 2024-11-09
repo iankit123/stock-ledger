@@ -39,13 +39,13 @@ interface YahooFinanceResponse {
   };
 }
 
-// Configure rate limiters
+// Configure rate limiters with more restrictive limits
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   message: {
-    error: "Too many requests",
-    details: "Please try again later",
+    error: "API rate limit exceeded",
+    details: "Too many requests. Please try again in 15 minutes.",
     code: "RATE_LIMIT_EXCEEDED"
   },
   standardHeaders: true,
@@ -54,10 +54,10 @@ const apiLimiter = rateLimit({
 
 const searchLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 10, // limit each IP to 10 search requests per minute
+  max: 5, // limit each IP to 5 search requests per minute
   message: {
     error: "Search rate limit exceeded",
-    details: "Too many search requests. Please wait a minute",
+    details: "Too many search requests. Please wait one minute before trying again.",
     code: "SEARCH_RATE_LIMIT"
   },
   standardHeaders: true,
@@ -129,9 +129,6 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Log request for debugging
-      console.log(`Fetching data for symbol: ${symbol}`);
-
       // Make request to Yahoo Finance
       const response = await axios.get<YahooFinanceResponse>(
         `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`,
@@ -143,7 +140,7 @@ export function registerRoutes(app: Express) {
           },
           headers: {
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
           },
           timeout: 10000 // 10 second timeout
         }
@@ -183,7 +180,7 @@ export function registerRoutes(app: Express) {
         if (error.code === 'ECONNABORTED') {
           return res.status(504).json({
             error: "Request timeout",
-            details: "The request to Yahoo Finance timed out",
+            details: "The request to Yahoo Finance timed out. Please try again.",
             code: "TIMEOUT"
           });
         }
@@ -191,7 +188,7 @@ export function registerRoutes(app: Express) {
         if (error.response?.status === 429) {
           return res.status(429).json({
             error: "Rate limit exceeded",
-            details: "Too many requests to Yahoo Finance API",
+            details: "Too many requests to Yahoo Finance API. Please wait a moment.",
             code: "YAHOO_RATE_LIMIT"
           });
         }
@@ -204,7 +201,6 @@ export function registerRoutes(app: Express) {
           });
         }
 
-        // Handle other Axios errors
         return res.status(error.response?.status || 500).json({
           error: "API error",
           details: error.response?.data?.error || error.message,
@@ -221,23 +217,38 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Search endpoint
-  // server/routes.ts - Update the search endpoint
-
+  // Search endpoint with improved error handling
   app.get("/api/search", async (req, res) => {
     try {
       const { query } = req.query;
 
+      // Validate query
       if (!query || typeof query !== 'string') {
         return res.status(400).json({ 
           error: "Invalid query",
-          details: "Search query is required",
-          code: "MISSING_QUERY"
+          details: "Search query must be a non-empty string",
+          code: "INVALID_QUERY"
         });
       }
 
-      // Clean the query
-      const cleanQuery = query.trim().toUpperCase();
+      // Validate query length
+      if (query.length < 1 || query.length > 20) {
+        return res.status(400).json({
+          error: "Invalid query length",
+          details: "Search query must be between 1 and 20 characters",
+          code: "INVALID_QUERY_LENGTH"
+        });
+      }
+
+      // Clean and validate the query
+      const cleanQuery = query.trim().toUpperCase().replace(/[^A-Z0-9.]/g, '');
+      if (!cleanQuery) {
+        return res.status(400).json({
+          error: "Invalid characters",
+          details: "Search query contains invalid characters",
+          code: "INVALID_CHARACTERS"
+        });
+      }
 
       // Create NSE specific query
       const searchQuery = cleanQuery.endsWith('.NS') ? cleanQuery : `${cleanQuery}.NS`;
@@ -277,7 +288,7 @@ export function registerRoutes(app: Express) {
         }))
         .slice(0, 10);
 
-      // If no NSE results found, try without .NS suffix
+      // Try alternative search if no results found
       if (formattedResults.length === 0) {
         const altResponse = await axios.get(
           `https://query1.finance.yahoo.com/v1/finance/search`,
@@ -317,7 +328,7 @@ export function registerRoutes(app: Express) {
       if (formattedResults.length === 0) {
         return res.status(404).json({
           error: "No results",
-          details: "No matching NSE stocks found",
+          details: "No matching NSE stocks found. Try a different search term.",
           code: "NO_RESULTS"
         });
       }
@@ -331,7 +342,7 @@ export function registerRoutes(app: Express) {
         if (error.code === 'ECONNABORTED') {
           return res.status(504).json({
             error: "Search timeout",
-            details: "The search request timed out",
+            details: "The search request timed out. Please try again.",
             code: "TIMEOUT"
           });
         }
@@ -339,7 +350,7 @@ export function registerRoutes(app: Express) {
         if (error.response?.status === 429) {
           return res.status(429).json({
             error: "Rate limit exceeded",
-            details: "Too many requests to Yahoo Finance API",
+            details: "Too many requests to Yahoo Finance API. Please wait a moment.",
             code: "YAHOO_RATE_LIMIT"
           });
         }
@@ -347,7 +358,7 @@ export function registerRoutes(app: Express) {
 
       res.status(500).json({ 
         error: "Search failed",
-        details: "Unable to search stocks. Please try again later.",
+        details: "Unable to search stocks. Please try again in a few moments.",
         code: "SEARCH_ERROR"
       });
     }

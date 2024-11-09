@@ -1,11 +1,13 @@
-// components/StockEntryDialog.tsx
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,  // Add this import
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -26,9 +28,24 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { NewStockEntry } from "@/types/ledger";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+// Form validation schema
+const stockEntrySchema = z.object({
+  dateBuy: z.date(),
+  priceBuy: z.number().positive("Buy price must be positive"),
+  targetPercent: z.number().min(0, "Target must be positive"),
+  stopLossPercent: z.number().min(0, "Stop loss must be positive"),
+  riskReward: z.number().positive("Risk/Reward must be positive"),
+  reason: z.string().min(1, "Reason is required"),
+  chartLink: z.string().url().optional(),
+  confidence: z.enum(["Low", "Medium", "High"]),
+});
+
+type StockEntryForm = z.infer<typeof stockEntrySchema>;
 
 interface StockEntryDialogProps {
   open: boolean;
@@ -37,38 +54,51 @@ interface StockEntryDialogProps {
 }
 
 export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntryDialogProps) {
-  const [date, setDate] = useState<Date>(new Date());
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; name: string } | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-
-    if (!selectedStock) return;
-
-    const formData = new FormData(e.currentTarget);
-
-    const entry: NewStockEntry = {
-      stockName: selectedStock.name,
-      symbol: selectedStock.symbol,
-      dateBuy: date.toISOString(),
-      priceBuy: parseFloat(formData.get('priceBuy') as string),
-      targetPercent: parseFloat(formData.get('targetPercent') as string),
-      stopLossPercent: parseFloat(formData.get('stopLossPercent') as string),
-      riskReward: parseFloat(formData.get('riskReward') as string),
-      reason: formData.get('reason') as string,
-      chartLink: formData.get('chartLink') as string || undefined,
-      confidence: formData.get('confidence') as 'Low' | 'Medium' | 'High',
-    };
-
-    onSubmit(entry);
-  };
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    formState: { errors, isSubmitting },
+    reset
+  } = useForm<StockEntryForm>({
+    resolver: zodResolver(stockEntrySchema),
+    defaultValues: {
+      dateBuy: new Date(),
+      confidence: "Medium",
+    }
+  });
 
   const handleStockSelect = (symbol: string, name: string) => {
     setSelectedStock({ symbol, name });
+    setSearchError(null);
+  };
+
+  const handleSearchError = (error: string) => {
+    setSearchError(error);
+  };
+
+  const onFormSubmit = async (data: StockEntryForm) => {
+    if (!selectedStock) {
+      setSearchError("Please select a stock first");
+      return;
+    }
+
+    const entry: NewStockEntry = {
+      ...data,
+      stockName: selectedStock.name,
+      symbol: selectedStock.symbol,
+      dateBuy: data.dateBuy.toISOString(),
+    };
+
+    onSubmit(entry);
+    reset();
+    setSelectedStock(null);
   };
 
   return (
-
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
@@ -77,14 +107,21 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
             Add a new stock to your ledger. Fill in the details below.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+
+        <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-4">
           <div className="space-y-2">
             <Label>Select Stock</Label>
             <StockSearch 
               onSelect={handleStockSelect}
+              onError={handleSearchError}
               className="w-full"
               showForm={false}
             />
+            {searchError && (
+              <Alert variant="destructive">
+                <AlertDescription>{searchError}</AlertDescription>
+              </Alert>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -95,18 +132,19 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
                   variant="outline"
                   className={cn(
                     "w-full justify-start text-left font-normal",
-                    !date && "text-muted-foreground"
+                    !selectedStock && "text-muted-foreground"
                   )}
+                  onClick={(e) => e.preventDefault()}
                 >
                   <CalendarIcon className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : <span>Pick a date</span>}
+                  {format(new Date(), "PPP")}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
-                  selected={date}
-                  onSelect={(date) => date && setDate(date)}
+                  selected={new Date()}
+                  onSelect={(date) => date && setValue('dateBuy', date)}
                   initialFocus
                 />
               </PopoverContent>
@@ -118,16 +156,19 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               <Label htmlFor="priceBuy">Buy Price</Label>
               <Input
                 id="priceBuy"
-                name="priceBuy"
                 type="number"
                 step="0.01"
-                required
+                {...register('priceBuy', { valueAsNumber: true })}
+                error={errors.priceBuy?.message}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="confidence">Confidence</Label>
-              <Select name="confidence" defaultValue="Medium">
+              <Select 
+                onValueChange={(value) => setValue('confidence', value as "Low" | "Medium" | "High")}
+                defaultValue="Medium"
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select confidence" />
                 </SelectTrigger>
@@ -137,6 +178,9 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
                   <SelectItem value="High">High</SelectItem>
                 </SelectContent>
               </Select>
+              {errors.confidence && (
+                <span className="text-sm text-destructive">{errors.confidence.message}</span>
+              )}
             </div>
           </div>
 
@@ -145,10 +189,10 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               <Label htmlFor="targetPercent">Target %</Label>
               <Input
                 id="targetPercent"
-                name="targetPercent"
                 type="number"
                 step="0.1"
-                required
+                {...register('targetPercent', { valueAsNumber: true })}
+                error={errors.targetPercent?.message}
               />
             </div>
 
@@ -156,10 +200,10 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               <Label htmlFor="stopLossPercent">Stop Loss %</Label>
               <Input
                 id="stopLossPercent"
-                name="stopLossPercent"
                 type="number"
                 step="0.1"
-                required
+                {...register('stopLossPercent', { valueAsNumber: true })}
+                error={errors.stopLossPercent?.message}
               />
             </div>
 
@@ -167,10 +211,10 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
               <Label htmlFor="riskReward">Risk/Reward</Label>
               <Input
                 id="riskReward"
-                name="riskReward"
                 type="number"
                 step="0.1"
-                required
+                {...register('riskReward', { valueAsNumber: true })}
+                error={errors.riskReward?.message}
               />
             </div>
           </div>
@@ -179,17 +223,18 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
             <Label htmlFor="reason">Why Bought? (Reason)</Label>
             <Textarea
               id="reason"
-              name="reason"
-              required
+              {...register('reason')}
+              error={errors.reason?.message}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="chartLink">Chart Link</Label>
+            <Label htmlFor="chartLink">Chart Link (Optional)</Label>
             <Input
               id="chartLink"
-              name="chartLink"
               type="url"
+              {...register('chartLink')}
+              error={errors.chartLink?.message}
             />
           </div>
 
@@ -197,8 +242,18 @@ export default function StockEntryDialog({ open, onClose, onSubmit }: StockEntry
             <Button variant="outline" type="button" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={!selectedStock}>
-              Add Entry
+            <Button 
+              type="submit" 
+              disabled={isSubmitting || !selectedStock}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Entry"
+              )}
             </Button>
           </div>
         </form>

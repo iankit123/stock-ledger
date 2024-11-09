@@ -39,45 +39,73 @@ interface YahooFinanceResponse {
   };
 }
 
-// Configure rate limiters with more restrictive limits
+// Configure rate limiters with more restrictive limits and longer windows
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 150, // limit each IP to 150 requests per windowMs
   message: {
     error: "API rate limit exceeded",
-    details: "Too many requests. Please try again in 15 minutes.",
+    details: "Too many requests. Please try again in 30 minutes.",
     code: "RATE_LIMIT_EXCEEDED"
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skipFailedRequests: true // Don't count failed requests
 });
 
 const searchLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 5, // limit each IP to 5 search requests per minute
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 20, // limit each IP to 20 search requests per 5 minutes
   message: {
     error: "Search rate limit exceeded",
-    details: "Too many search requests. Please wait one minute before trying again.",
+    details: "Too many search requests. Please wait 5 minutes before trying again.",
     code: "SEARCH_RATE_LIMIT"
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skipFailedRequests: true
 });
+
+// Exponential backoff configuration
+const backoffConfig = {
+  initialDelay: 1000, // 1 second
+  maxDelay: 10000, // 10 seconds
+  factor: 2,
+  retries: 3
+};
+
+// Helper function for exponential backoff
+async function withBackoff(fn: () => Promise<any>, attempt = 1): Promise<any> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (attempt > backoffConfig.retries || 
+        error?.response?.status === 404 || 
+        error?.response?.status === 400) {
+      throw error;
+    }
+
+    const delay = Math.min(
+      backoffConfig.initialDelay * Math.pow(backoffConfig.factor, attempt - 1),
+      backoffConfig.maxDelay
+    );
+
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return withBackoff(fn, attempt + 1);
+  }
+}
 
 // Helper functions
 function isValidStockSymbol(symbol: string): boolean {
-  // Handle empty or invalid input
   if (!symbol || typeof symbol !== 'string') return false;
 
   const isNSEStock = symbol.endsWith('.NS');
   const baseSymbol = isNSEStock ? symbol.slice(0, -3) : symbol;
 
   if (isNSEStock) {
-    // NSE stocks can be alphabetic or 6-digit numeric
     return /^[A-Z]+$/.test(baseSymbol) || /^[0-9]{6}$/.test(baseSymbol);
   }
 
-  // US stocks are 1-5 uppercase letters
   return /^[A-Z]{1,5}$/.test(symbol);
 }
 
@@ -88,7 +116,6 @@ function validateYahooResponse(data: YahooFinanceResponse) {
 
   const result = data.chart.result[0];
 
-  // Check for required fields
   if (!result.meta?.regularMarketPrice || !result.timestamp || !result.indicators?.quote?.[0]) {
     throw new Error("Missing required data fields");
   }
@@ -96,12 +123,18 @@ function validateYahooResponse(data: YahooFinanceResponse) {
   return result;
 }
 
+// Common headers for Yahoo Finance API requests
+const yahooApiHeaders = {
+  'Accept': 'application/json',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+  'Accept-Language': 'en-US,en;q=0.9',
+  'Origin': 'https://finance.yahoo.com',
+  'Referer': 'https://finance.yahoo.com/'
+};
+
 // Export the main router configuration
 export function registerRoutes(app: Express) {
-  // Apply rate limiting to all API routes
   app.use('/api/', apiLimiter);
-
-  // Additional rate limit for search endpoint
   app.use('/api/search', searchLimiter);
 
   // Stock data endpoint
@@ -109,7 +142,6 @@ export function registerRoutes(app: Express) {
     try {
       const { symbol } = req.params;
 
-      // Validate input
       if (!symbol) {
         return res.status(400).json({ 
           error: "Missing symbol",
@@ -118,7 +150,6 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Validate symbol format
       if (!isValidStockSymbol(symbol)) {
         return res.status(400).json({ 
           error: "Invalid symbol format",
@@ -129,53 +160,41 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Make request to Yahoo Finance
-      const response = await axios.get<YahooFinanceResponse>(
-        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`,
-        {
-          params: {
-            interval: '1m',
-            range: '1d',
-            includePrePost: false
-          },
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          timeout: 10000 // 10 second timeout
+      const stockData = await withBackoff(async () => {
+        const response = await axios.get<YahooFinanceResponse>(
+          `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`,
+          {
+            params: {
+              interval: '1m',
+              range: '1d',
+              includePrePost: false
+            },
+            headers: yahooApiHeaders,
+            timeout: 15000
+          }
+        );
+
+        if (response.data?.chart?.error) {
+          throw {
+            response: {
+              status: 404,
+              data: {
+                error: "Stock not found",
+                details: response.data.chart.error.description,
+                code: "STOCK_NOT_FOUND",
+                symbol
+              }
+            }
+          };
         }
-      );
 
-      // Check for Yahoo API errors
-      if (response.data?.chart?.error) {
-        console.log('Yahoo API Error:', response.data.chart.error);
-        return res.status(404).json({
-          error: "Stock not found",
-          details: response.data.chart.error.description,
-          code: "STOCK_NOT_FOUND",
-          symbol
-        });
-      }
-
-      // Validate response data
-      try {
         validateYahooResponse(response.data);
-      } catch (validationError: any) {
-        console.error('Validation Error:', validationError);
-        return res.status(500).json({
-          error: "Invalid response",
-          details: validationError.message,
-          code: "VALIDATION_ERROR"
-        });
-      }
+        return response.data;
+      });
 
-      // Send successful response
-      res.json(response.data);
+      res.json(stockData);
 
     } catch (error: any) {
-      console.error('Stock API Error:', error);
-
-      // Handle Axios errors
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') {
           return res.status(504).json({
@@ -194,7 +213,7 @@ export function registerRoutes(app: Express) {
         }
 
         if (error.response?.status === 404) {
-          return res.status(404).json({ 
+          return res.status(404).json(error.response.data || { 
             error: "Stock not found",
             details: `No data available for symbol: ${req.params.symbol}`,
             code: "NOT_FOUND"
@@ -208,7 +227,6 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Handle all other errors
       res.status(500).json({ 
         error: "Server error",
         details: error instanceof Error ? error.message : "An unknown error occurred",
@@ -217,12 +235,11 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  // Search endpoint with improved error handling
+  // Search endpoint with improved error handling and fallback
   app.get("/api/search", async (req, res) => {
     try {
       const { query } = req.query;
 
-      // Validate query
       if (!query || typeof query !== 'string') {
         return res.status(400).json({ 
           error: "Invalid query",
@@ -231,7 +248,6 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Validate query length
       if (query.length < 1 || query.length > 20) {
         return res.status(400).json({
           error: "Invalid query length",
@@ -240,7 +256,6 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Clean and validate the query
       const cleanQuery = query.trim().toUpperCase().replace(/[^A-Z0-9.]/g, '');
       if (!cleanQuery) {
         return res.status(400).json({
@@ -250,82 +265,52 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      // Create NSE specific query
+      // Primary search with NSE suffix
       const searchQuery = cleanQuery.endsWith('.NS') ? cleanQuery : `${cleanQuery}.NS`;
+      
+      const searchStocks = async (q: string, fallback = false) => {
+        return withBackoff(async () => {
+          const response = await axios.get(
+            `https://query1.finance.yahoo.com/v1/finance/search`,
+            {
+              params: {
+                q,
+                quotesCount: 10,
+                newsCount: 0,
+                enableFuzzyQuery: fallback,
+                quotesQueryId: fallback ? 'tss_match_fuzzy_query' : 'tss_match_phrase_query'
+              },
+              headers: yahooApiHeaders,
+              timeout: 10000
+            }
+          );
 
-      const response = await axios.get(
-        `https://query1.finance.yahoo.com/v1/finance/search`,
-        {
-          params: {
-            q: searchQuery,
-            quotesCount: 10,
-            newsCount: 0,
-            enableFuzzyQuery: false,
-            quotesQueryId: 'tss_match_phrase_query'
-          },
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          timeout: 5000
-        }
-      );
+          return (response.data.quotes || [])
+            .filter((quote: any) => (
+              quote?.symbol &&
+              quote.symbol.endsWith('.NS') &&
+              (quote?.longname || quote?.shortname) &&
+              quote?.quoteType === 'EQUITY'
+            ))
+            .map((quote: any) => ({
+              symbol: quote.symbol,
+              name: quote.longname || quote.shortname,
+              exchange: 'NSE',
+              market: 'NSE'
+            }))
+            .slice(0, 10);
+        });
+      };
 
-      // Filter for NSE stocks only
-      const quotes = response.data.quotes || [];
-      const formattedResults = quotes
-        .filter((quote: any) => (
-          quote?.symbol &&
-          quote.symbol.endsWith('.NS') &&
-          (quote?.longname || quote?.shortname) &&
-          quote?.quoteType === 'EQUITY'
-        ))
-        .map((quote: any) => ({
-          symbol: quote.symbol,
-          name: quote.longname || quote.shortname,
-          exchange: 'NSE',
-          market: 'NSE'
-        }))
-        .slice(0, 10);
+      // Try primary search first
+      let results = await searchStocks(searchQuery);
 
-      // Try alternative search if no results found
-      if (formattedResults.length === 0) {
-        const altResponse = await axios.get(
-          `https://query1.finance.yahoo.com/v1/finance/search`,
-          {
-            params: {
-              q: cleanQuery,
-              quotesCount: 10,
-              newsCount: 0
-            },
-            headers: {
-              'Accept': 'application/json',
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            timeout: 5000
-          }
-        );
-
-        const altResults = (altResponse.data.quotes || [])
-          .filter((quote: any) => (
-            quote?.symbol &&
-            quote.symbol.endsWith('.NS') &&
-            quote?.quoteType === 'EQUITY'
-          ))
-          .map((quote: any) => ({
-            symbol: quote.symbol,
-            name: quote.longname || quote.shortname,
-            exchange: 'NSE',
-            market: 'NSE'
-          }))
-          .slice(0, 10);
-
-        if (altResults.length > 0) {
-          return res.json(altResults);
-        }
+      // If no results, try fallback search
+      if (results.length === 0) {
+        results = await searchStocks(cleanQuery, true);
       }
 
-      if (formattedResults.length === 0) {
+      if (results.length === 0) {
         return res.status(404).json({
           error: "No results",
           details: "No matching NSE stocks found. Try a different search term.",
@@ -333,11 +318,9 @@ export function registerRoutes(app: Express) {
         });
       }
 
-      res.json(formattedResults);
+      res.json(results);
 
     } catch (error: any) {
-      console.error('Search API Error:', error);
-
       if (axios.isAxiosError(error)) {
         if (error.code === 'ECONNABORTED') {
           return res.status(504).json({
@@ -354,6 +337,12 @@ export function registerRoutes(app: Express) {
             code: "YAHOO_RATE_LIMIT"
           });
         }
+
+        return res.status(error.response?.status || 500).json({
+          error: "API error",
+          details: error.response?.data?.error || "Failed to search stocks",
+          code: "API_ERROR"
+        });
       }
 
       res.status(500).json({ 

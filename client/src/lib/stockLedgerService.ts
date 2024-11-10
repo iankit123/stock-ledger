@@ -15,6 +15,11 @@ import { db } from './firebase';
 import type { NewStockEntry, StockEntry } from '@/types/ledger';
 
 const COLLECTION_NAME = 'stockEntries';
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 1000; // 1 second
+
+// Helper function for delay between retries
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 // Serialize error objects for safe logging
 function serializeError(error: unknown): string {
@@ -43,6 +48,43 @@ function safeConsoleLog(message: string, error?: unknown) {
   } else {
     console.log(message);
   }
+}
+
+// Retry wrapper for Firestore operations
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  operationName: string,
+  maxRetries: number = MAX_RETRIES
+): Promise<T> {
+  let lastError: unknown;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      
+      if (error instanceof FirestoreError) {
+        // Don't retry for these errors
+        if (error.code === 'permission-denied' || 
+            error.code === 'not-found' || 
+            error.code === 'invalid-argument') {
+          throw error;
+        }
+      }
+      
+      if (attempt === maxRetries) {
+        safeConsoleLog(`Failed ${operationName} after ${maxRetries} attempts:`, error);
+        throw error;
+      }
+      
+      // Wait before retrying, with exponential backoff
+      await delay(RETRY_DELAY * Math.pow(2, attempt - 1));
+      safeConsoleLog(`Retrying ${operationName} (attempt ${attempt + 1}/${maxRetries})`);
+    }
+  }
+  
+  throw lastError;
 }
 
 // Helper function to clean undefined values
@@ -177,164 +219,174 @@ function handleFirestoreError(error: unknown, operation: string): never {
   if (error instanceof FirestoreError) {
     switch (error.code) {
       case 'permission-denied':
-        throw new Error('You do not have permission to perform this operation');
+        throw new Error('Please verify that you have the necessary permissions to perform this operation. If the issue persists, try refreshing the page.');
       case 'not-found':
-        throw new Error('The requested document was not found');
+        throw new Error('The requested stock entry could not be found. It may have been deleted.');
       case 'already-exists':
-        throw new Error('A document with the same ID already exists');
+        throw new Error('This stock entry already exists. Please try updating it instead.');
       case 'failed-precondition':
-        throw new Error('Operation failed due to server state');
+        throw new Error('Unable to complete the operation. Please ensure all required data is provided.');
       case 'unavailable':
-        throw new Error('Service temporarily unavailable, please try again');
+        throw new Error('The service is temporarily unavailable. Please try again in a few moments.');
+      case 'resource-exhausted':
+        throw new Error('You have exceeded the maximum number of operations. Please wait a moment and try again.');
       default:
-        throw new Error(`Firebase operation failed: ${error.message}`);
+        throw new Error(`Operation failed: ${error.message}. Please try again or contact support if the issue persists.`);
     }
   }
 
-  throw new Error(`Failed to ${operation}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  throw new Error(`Failed to ${operation}: ${error instanceof Error ? error.message : 'An unexpected error occurred'}`);
 }
 
 export const stockLedgerService = {
   async addEntry(entry: NewStockEntry): Promise<StockEntry> {
-    try {
-      // Validate required fields
-      const stockName = validateString(entry.stockName, 'Stock name');
-      const symbol = validateString(entry.symbol, 'Symbol');
-      const reason = validateString(entry.reason, 'Reason');
-      const confidence = validateString(entry.confidence, 'Confidence');
+    return withRetry(async () => {
+      try {
+        // Validate required fields
+        const stockName = validateString(entry.stockName, 'Stock name');
+        const symbol = validateString(entry.symbol, 'Symbol');
+        const reason = validateString(entry.reason, 'Reason');
+        const confidence = validateString(entry.confidence, 'Confidence');
 
-      if (!['Low', 'Medium', 'High'].includes(confidence)) {
-        throw new Error('Invalid confidence level');
-      }
-
-      // Validate numeric fields
-      const priceBuy = validateNumericField(entry.priceBuy, 'Buy price');
-      const targetPercent = validateNumericField(entry.targetPercent, 'Target percentage');
-      const stopLossPercent = validateNumericField(entry.stopLossPercent, 'Stop loss percentage');
-
-      const validatedEntry = {
-        stockName,
-        symbol,
-        dateBuy: Timestamp.fromDate(new Date(entry.dateBuy)),
-        priceBuy,
-        targetPercent,
-        stopLossPercent,
-        reason,
-        chartLink: entry.chartLink?.trim(),
-        confidence,
-        riskReward: Number((targetPercent / stopLossPercent).toFixed(2)),
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-        status: 'Active' as const
-      };
-
-      const cleanedEntry = removeUndefinedValues(validatedEntry);
-      const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedEntry);
-
-      return {
-        id: docRef.id,
-        ...entry,
-        riskReward: validatedEntry.riskReward,
-        status: 'Active',
-        createdAt: validatedEntry.createdAt.toDate().toISOString(),
-        updatedAt: validatedEntry.updatedAt.toDate().toISOString()
-      };
-    } catch (error) {
-      return handleFirestoreError(error, 'add stock entry');
-    }
-  },
-
-  async getEntries(): Promise<StockEntry[]> {
-    try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        orderBy('createdAt', 'desc')
-      );
-
-      const querySnapshot = await getDocs(q);
-      const entries = querySnapshot.docs.map(doc => 
-        convertFirestoreToStockEntry(doc.id, doc.data())
-      );
-
-      // Validate all entries
-      entries.forEach(entry => {
-        if (!entry.id || !entry.stockName || !entry.symbol) {
-          throw new Error('Invalid entry data received from Firestore');
-        }
-      });
-
-      return entries;
-    } catch (error) {
-      return handleFirestoreError(error, 'fetch stock entries');
-    }
-  },
-
-  async updateEntry(id: string, updates: Partial<StockEntry>): Promise<void> {
-    try {
-      if (!id) {
-        throw new Error('Entry ID is required for update');
-      }
-
-      const docRef = doc(db, COLLECTION_NAME, id);
-      const updateData: Record<string, any> = {};
-
-      // Validate fields if they exist in updates
-      if ('stockName' in updates) {
-        updateData.stockName = validateString(updates.stockName, 'Stock name');
-      }
-      if ('symbol' in updates) {
-        updateData.symbol = validateString(updates.symbol, 'Symbol');
-      }
-      if ('priceBuy' in updates) {
-        updateData.priceBuy = validateNumericField(updates.priceBuy, 'Buy price');
-      }
-      if ('priceSell' in updates) {
-        updateData.priceSell = validateNumericField(updates.priceSell, 'Sell price');
-      }
-      if ('targetPercent' in updates) {
-        updateData.targetPercent = validateNumericField(updates.targetPercent, 'Target percentage');
-      }
-      if ('stopLossPercent' in updates) {
-        updateData.stopLossPercent = validateNumericField(updates.stopLossPercent, 'Stop loss percentage');
-      }
-      if ('reason' in updates) {
-        updateData.reason = validateString(updates.reason, 'Reason');
-      }
-      if ('confidence' in updates) {
-        const confidence = validateString(updates.confidence, 'Confidence');
         if (!['Low', 'Medium', 'High'].includes(confidence)) {
           throw new Error('Invalid confidence level');
         }
-        updateData.confidence = confidence;
-      }
 
-      // Handle dates
-      if ('dateBuy' in updates) {
-        updateData.dateBuy = Timestamp.fromDate(new Date(updates.dateBuy));
-      }
-      if ('dateSell' in updates) {
-        updateData.dateSell = updates.dateSell ? Timestamp.fromDate(new Date(updates.dateSell)) : null;
-      }
+        // Validate numeric fields
+        const priceBuy = validateNumericField(entry.priceBuy, 'Buy price');
+        const targetPercent = validateNumericField(entry.targetPercent, 'Target percentage');
+        const stopLossPercent = validateNumericField(entry.stopLossPercent, 'Stop loss percentage');
 
-      updateData.updatedAt = Timestamp.now();
+        const validatedEntry = {
+          stockName,
+          symbol,
+          dateBuy: Timestamp.fromDate(new Date(entry.dateBuy)),
+          priceBuy,
+          targetPercent,
+          stopLossPercent,
+          reason,
+          chartLink: entry.chartLink?.trim(),
+          confidence,
+          riskReward: Number((targetPercent / stopLossPercent).toFixed(2)),
+          createdAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          status: 'Active' as const
+        };
 
-      const cleanedUpdates = removeUndefinedValues(updateData);
-      await updateDoc(docRef, cleanedUpdates);
-    } catch (error) {
-      handleFirestoreError(error, 'update stock entry');
-    }
+        const cleanedEntry = removeUndefinedValues(validatedEntry);
+        const docRef = await addDoc(collection(db, COLLECTION_NAME), cleanedEntry);
+
+        return {
+          id: docRef.id,
+          ...entry,
+          riskReward: validatedEntry.riskReward,
+          status: 'Active',
+          createdAt: validatedEntry.createdAt.toDate().toISOString(),
+          updatedAt: validatedEntry.updatedAt.toDate().toISOString()
+        };
+      } catch (error) {
+        return handleFirestoreError(error, 'add stock entry');
+      }
+    }, 'add stock entry');
+  },
+
+  async getEntries(): Promise<StockEntry[]> {
+    return withRetry(async () => {
+      try {
+        const q = query(
+          collection(db, COLLECTION_NAME),
+          orderBy('createdAt', 'desc')
+        );
+
+        const querySnapshot = await getDocs(q);
+        const entries = querySnapshot.docs.map(doc => 
+          convertFirestoreToStockEntry(doc.id, doc.data())
+        );
+
+        // Validate all entries
+        entries.forEach(entry => {
+          if (!entry.id || !entry.stockName || !entry.symbol) {
+            throw new Error('Invalid entry data received from Firestore');
+          }
+        });
+
+        return entries;
+      } catch (error) {
+        return handleFirestoreError(error, 'fetch stock entries');
+      }
+    }, 'fetch stock entries');
+  },
+
+  async updateEntry(id: string, updates: Partial<StockEntry>): Promise<void> {
+    return withRetry(async () => {
+      try {
+        if (!id) {
+          throw new Error('Entry ID is required for update');
+        }
+
+        const docRef = doc(db, COLLECTION_NAME, id);
+        const updateData: Record<string, any> = {};
+
+        // Validate fields if they exist in updates
+        if ('stockName' in updates) {
+          updateData.stockName = validateString(updates.stockName, 'Stock name');
+        }
+        if ('symbol' in updates) {
+          updateData.symbol = validateString(updates.symbol, 'Symbol');
+        }
+        if ('priceBuy' in updates) {
+          updateData.priceBuy = validateNumericField(updates.priceBuy, 'Buy price');
+        }
+        if ('priceSell' in updates) {
+          updateData.priceSell = validateNumericField(updates.priceSell, 'Sell price');
+        }
+        if ('targetPercent' in updates) {
+          updateData.targetPercent = validateNumericField(updates.targetPercent, 'Target percentage');
+        }
+        if ('stopLossPercent' in updates) {
+          updateData.stopLossPercent = validateNumericField(updates.stopLossPercent, 'Stop loss percentage');
+        }
+        if ('reason' in updates) {
+          updateData.reason = validateString(updates.reason, 'Reason');
+        }
+        if ('confidence' in updates) {
+          const confidence = validateString(updates.confidence, 'Confidence');
+          if (!['Low', 'Medium', 'High'].includes(confidence)) {
+            throw new Error('Invalid confidence level');
+          }
+          updateData.confidence = confidence;
+        }
+
+        // Handle dates
+        if ('dateBuy' in updates) {
+          updateData.dateBuy = Timestamp.fromDate(new Date(updates.dateBuy));
+        }
+        if ('dateSell' in updates) {
+          updateData.dateSell = updates.dateSell ? Timestamp.fromDate(new Date(updates.dateSell)) : null;
+        }
+
+        updateData.updatedAt = Timestamp.now();
+
+        const cleanedUpdates = removeUndefinedValues(updateData);
+        await updateDoc(docRef, cleanedUpdates);
+      } catch (error) {
+        handleFirestoreError(error, 'update stock entry');
+      }
+    }, 'update stock entry');
   },
 
   async deleteEntry(id: string): Promise<void> {
-    try {
-      if (!id) {
-        throw new Error('Entry ID is required for deletion');
-      }
+    return withRetry(async () => {
+      try {
+        if (!id) {
+          throw new Error('Entry ID is required for deletion');
+        }
 
-      const docRef = doc(db, COLLECTION_NAME, id);
-      await deleteDoc(docRef);
-    } catch (error) {
-      handleFirestoreError(error, 'delete stock entry');
-    }
+        const docRef = doc(db, COLLECTION_NAME, id);
+        await deleteDoc(docRef);
+      } catch (error) {
+        handleFirestoreError(error, 'delete stock entry');
+      }
+    }, 'delete stock entry');
   }
 };

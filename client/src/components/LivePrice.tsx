@@ -12,6 +12,7 @@ interface LivePriceProps {
 
 export default function LivePrice({ symbol }: LivePriceProps) {
   const [retryCount, setRetryCount] = useState(0);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const { data, error, isLoading, mutate } = useSWR(
     symbol ? `/api/stock/${symbol}` : null,
@@ -20,26 +21,30 @@ export default function LivePrice({ symbol }: LivePriceProps) {
       dedupingInterval: 5000,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
-      onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+      onSuccess: () => {
+        setIsInitialLoad(false);
+        setRetryCount(0);
+      },
+      onError: (error, key, config) => {
         // Don't retry on 404s or rate limits
         if (error.status === 404 || error.status === 429) return;
 
         // Only retry up to 3 times
         if (retryCount >= 3) return;
 
-        // Retry after 5 seconds
-        setTimeout(() => revalidate({ retryCount }), 5000);
-        setRetryCount(retryCount);
+        setRetryCount(prev => prev + 1);
       }
     }
   );
 
   useEffect(() => {
-    // Reset retry count when symbol changes
+    // Reset states when symbol changes
     setRetryCount(0);
+    setIsInitialLoad(true);
   }, [symbol]);
 
-  if (isLoading) {
+  // Show skeleton loader only on initial load
+  if (isInitialLoad && isLoading) {
     return (
       <div className="space-y-3">
         <Skeleton className="h-4 w-24" />
@@ -62,7 +67,10 @@ export default function LivePrice({ symbol }: LivePriceProps) {
           </p>
         )}
         <button 
-          onClick={() => mutate()} 
+          onClick={() => {
+            setRetryCount(0);
+            mutate();
+          }} 
           className="text-sm text-primary hover:underline mt-2"
         >
           Try again

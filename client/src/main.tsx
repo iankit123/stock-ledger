@@ -7,13 +7,14 @@ import { fetcher } from "./lib/fetcher";
 import StockDashboard from "./pages/StockDashboard";
 import { Toaster } from "@/components/ui/toaster";
 
-// SWR configuration with optimized retry logic
+// SWR configuration with consistent loading states
 const swrConfig = {
   fetcher,
-  // Reduce retries to 2 times
+  // Reduce retries and add loading delay for consistency
+  loadingTimeout: 3000,
   errorRetryCount: 2,
-  // Longer retry intervals with exponential backoff
-  errorRetryInterval: (retryCount: number) => Math.min(3000 * 2 ** retryCount, 30000),
+  // Use fixed retry interval to prevent inconsistency
+  errorRetryInterval: 3000,
   // Don't retry for client errors or rate limits
   shouldRetryOnError: (err: any) => {
     if (!err.response) return true; // Retry network errors
@@ -21,21 +22,26 @@ const swrConfig = {
     // Don't retry 4xx errors or rate limits
     return status >= 500 && status !== 429;
   },
-  // Increased deduplication interval
-  dedupingInterval: 3000,
-  // Keep previous data while revalidating
+  // Increased deduplication interval for better caching
+  dedupingInterval: 5000,
+  // Keep previous data while revalidating for smoother transitions
   keepPreviousData: true,
   // Reduced revalidation interval
-  refreshInterval: 60000, // 1 minute
-  // Focus revalidation
-  revalidateOnFocus: true,
-  // Network revalidation
+  refreshInterval: 30000, // 30 seconds
+  // Focus revalidation with delay
+  revalidateOnFocus: false,
+  // Network revalidation with delay
   revalidateOnReconnect: true,
+  // Consistent error handling
   onError: (error: any, key: string) => {
     // Log errors but prevent console spam
     if (!error.response?.data?.code?.includes('RATE_LIMIT')) {
       console.error("SWR Error:", { key, info: error.response?.data || error });
     }
+  },
+  // Add loading delay for consistent UI
+  onLoadingSlow: (key: string) => {
+    console.warn("Slow loading detected:", key);
   }
 };
 

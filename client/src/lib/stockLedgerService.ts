@@ -18,6 +18,7 @@ import type { NewStockEntry, StockEntry } from '@/types/ledger';
 const COLLECTION_NAME = 'stockEntries';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
+const MAX_INITIALIZATION_ATTEMPTS = 3;
 
 // Helper function for delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -51,14 +52,25 @@ function safeConsoleLog(message: string, error?: unknown) {
   }
 }
 
-// Check and handle Firebase connection
+// Check and handle Firebase connection with multiple attempts
 async function ensureFirebaseConnection(): Promise<void> {
-  if (!isFirebaseInitialized()) {
+  for (let attempt = 0; attempt < MAX_INITIALIZATION_ATTEMPTS; attempt++) {
+    if (isFirebaseInitialized()) {
+      return;
+    }
+
     try {
       await reinitializeFirebase();
+      return;
     } catch (error) {
       const initError = getInitializationError();
-      throw new Error(`Firebase not initialized: ${initError?.message || 'Unknown error'}`);
+      safeConsoleLog(`Firebase initialization attempt ${attempt + 1} failed:`, initError);
+      
+      if (attempt === MAX_INITIALIZATION_ATTEMPTS - 1) {
+        throw new Error(`Firebase initialization failed after ${MAX_INITIALIZATION_ATTEMPTS} attempts: ${initError?.message || 'Unknown error'}`);
+      }
+      
+      await delay(RETRY_DELAY * Math.pow(2, attempt));
     }
   }
 }
@@ -81,7 +93,7 @@ async function withRetry<T>(
       
       if (error instanceof FirestoreError) {
         // Check for connection-related errors
-        if (error.code === 'unavailable' || error.code === 'network-request-failed') {
+        if (error.code === 'unavailable' || error.code === 'failed-precondition') {
           safeConsoleLog(`Connection error during ${operationName}, attempting to reinitialize Firebase`);
           try {
             await reinitializeFirebase();

@@ -1,5 +1,5 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, enableIndexedDbPersistence, Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
 
 // Firebase configuration using environment variables
 const firebaseConfig = {
@@ -9,6 +9,12 @@ const firebaseConfig = {
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
+};
+
+const firestoreSettings = {
+  cache: {
+    experimentalForceOwningTab: true
+  }
 };
 
 let firebaseApp: FirebaseApp | null = null;
@@ -25,16 +31,8 @@ const initializeFirebase = async (retries = 3): Promise<Firestore> => {
       }
       
       if (!firestoreDb) {
-        firestoreDb = getFirestore(firebaseApp);
-        
-        // Enable offline persistence
-        await enableIndexedDbPersistence(firestoreDb).catch((err) => {
-          if (err.code === 'failed-precondition') {
-            console.warn('Persistence failed: multiple tabs open');
-          } else if (err.code === 'unimplemented') {
-            console.warn('Persistence not available in this browser');
-          }
-        });
+        // Initialize Firestore with cache settings
+        firestoreDb = initializeFirestore(firebaseApp, firestoreSettings);
       }
       
       isInitialized = true;
@@ -62,7 +60,18 @@ export const getInitializationError = () => initializationError;
 export const getFirebaseApp = () => firebaseApp;
 
 // Initialize and export db
-export const db = await initializeFirebase();
+let db: Firestore;
+
+// Initialize Firebase immediately but handle errors gracefully
+initializeFirebase()
+  .then((firestore) => {
+    db = firestore;
+  })
+  .catch((error) => {
+    console.error('Failed to initialize Firebase:', error);
+  });
+
+export { db };
 
 // Export reinitialize function for manual retry
 export const reinitializeFirebase = () => initializeFirebase();

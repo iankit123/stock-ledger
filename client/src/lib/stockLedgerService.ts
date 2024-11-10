@@ -9,9 +9,10 @@ import {
   orderBy,
   Timestamp,
   DocumentData,
-  FirestoreError
+  FirestoreError,
+  getFirestore
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { db, isFirebaseInitialized, reinitializeFirebase, getInitializationError } from './firebase';
 import type { NewStockEntry, StockEntry } from '@/types/ledger';
 
 const COLLECTION_NAME = 'stockEntries';
@@ -50,12 +51,26 @@ function safeConsoleLog(message: string, error?: unknown) {
   }
 }
 
-// Retry wrapper for Firestore operations
+// Check and handle Firebase connection
+async function ensureFirebaseConnection(): Promise<void> {
+  if (!isFirebaseInitialized()) {
+    try {
+      await reinitializeFirebase();
+    } catch (error) {
+      const initError = getInitializationError();
+      throw new Error(`Firebase not initialized: ${initError?.message || 'Unknown error'}`);
+    }
+  }
+}
+
+// Retry wrapper for Firestore operations with connection check
 async function withRetry<T>(
   operation: () => Promise<T>,
   operationName: string,
   maxRetries: number = MAX_RETRIES
 ): Promise<T> {
+  await ensureFirebaseConnection();
+  
   let lastError: unknown;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -65,6 +80,16 @@ async function withRetry<T>(
       lastError = error;
       
       if (error instanceof FirestoreError) {
+        // Check for connection-related errors
+        if (error.code === 'unavailable' || error.code === 'network-request-failed') {
+          safeConsoleLog(`Connection error during ${operationName}, attempting to reinitialize Firebase`);
+          try {
+            await reinitializeFirebase();
+          } catch (reinitError) {
+            safeConsoleLog('Failed to reinitialize Firebase', reinitError);
+          }
+        }
+        
         // Don't retry for these errors
         if (error.code === 'permission-denied' || 
             error.code === 'not-found' || 
@@ -138,6 +163,15 @@ function validateString(value: unknown, fieldName: string): string {
   return value.trim();
 }
 
+// Helper function to validate numeric fields
+function validateNumericField(value: any, fieldName: string): number {
+  const num = validateAndFormatNumber(value, fieldName);
+  if (num <= 0) {
+    throw new Error(`${fieldName} must be greater than 0`);
+  }
+  return num;
+}
+
 // Helper function to convert Firestore data to StockEntry
 function convertFirestoreToStockEntry(id: string, data: DocumentData): StockEntry {
   try {
@@ -201,15 +235,6 @@ function convertFirestoreToStockEntry(id: string, data: DocumentData): StockEntr
     safeConsoleLog(`Error converting document ${id}:`, error);
     throw new Error(`Failed to convert document ${id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
-}
-
-// Helper function to validate numeric fields
-function validateNumericField(value: any, fieldName: string): number {
-  const num = validateAndFormatNumber(value, fieldName);
-  if (num <= 0) {
-    throw new Error(`${fieldName} must be greater than 0`);
-  }
-  return num;
 }
 
 // Helper function to handle Firestore errors

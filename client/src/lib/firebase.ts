@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -11,21 +11,11 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-let app;
-try {
-  app = initializeApp(firebaseConfig);
-} catch (error) {
-  console.error('Error initializing Firebase:', error);
-  throw error;
-}
+const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with basic configuration
-let db;
-try {
-  db = getFirestore(app);
-} catch (error) {
-  console.error('Error initializing Firestore:', error);
-  throw error;
-}
+// Initialize Firestore with specific settings for better cross-environment compatibility
+const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 
 export { db };

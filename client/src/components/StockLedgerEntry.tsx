@@ -81,8 +81,12 @@ export default function StockLedgerEntry({
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 text-muted-foreground" />
             <div className="flex flex-col">
-              <span className="text-sm">{entry.addedBy.displayName || 'User'}</span>
-              <span className="text-xs text-muted-foreground">{entry.addedBy.email}</span>
+              <span className="text-sm">
+                {entry.addedBy?.displayName || 'Anonymous User'}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {entry.addedBy?.email || 'No email'}
+              </span>
             </div>
           </div>
         </td>
@@ -176,7 +180,7 @@ export default function StockLedgerEntry({
 
         {/* Profit/Loss */}
         <td className="p-4 text-right">
-          {entry.priceSell ? (
+          {entry.priceSell && entry.profitLoss ? (
             <span className={entry.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}>
               {formattedCurrency}{Math.abs(entry.profitLoss).toFixed(2)}
               ({((entry.profitLoss / entry.priceBuy) * 100).toFixed(2)}%)

@@ -23,6 +23,13 @@ const delay = (ms: number, attempt: number) => new Promise(resolve =>
   setTimeout(resolve, ms * Math.pow(2, attempt - 1))
 );
 
+// Check if Firestore is initialized
+function checkFirestoreInitialization() {
+  if (!db) {
+    throw new Error('Firestore is not initialized. Please refresh the page and try again.');
+  }
+}
+
 // Serialize error objects for safe logging
 function serializeError(error: unknown): string {
   if (error instanceof FirestoreError) {
@@ -239,6 +246,7 @@ function handleFirestoreError(error: unknown, operation: string): never {
 
 export const stockLedgerService = {
   async addEntry(entry: NewStockEntry): Promise<StockEntry> {
+    checkFirestoreInitialization();
     return withRetry(async () => {
       try {
         // Validate required fields
@@ -290,6 +298,7 @@ export const stockLedgerService = {
   },
 
   async getEntries(): Promise<StockEntry[]> {
+    checkFirestoreInitialization();
     return withRetry(async () => {
       try {
         const q = query(
@@ -317,6 +326,7 @@ export const stockLedgerService = {
   },
 
   async updateEntry(id: string, updates: Partial<StockEntry>): Promise<void> {
+    checkFirestoreInitialization();
     return withRetry(async () => {
       try {
         if (!id) {
@@ -358,7 +368,7 @@ export const stockLedgerService = {
 
         // Handle dates
         if ('dateBuy' in updates) {
-          updateData.dateBuy = Timestamp.fromDate(new Date(updates.dateBuy));
+          updateData.dateBuy = updates.dateBuy ? Timestamp.fromDate(new Date(updates.dateBuy)) : null;
         }
         if ('dateSell' in updates) {
           updateData.dateSell = updates.dateSell ? Timestamp.fromDate(new Date(updates.dateSell)) : null;
@@ -375,6 +385,7 @@ export const stockLedgerService = {
   },
 
   async deleteEntry(id: string): Promise<void> {
+    checkFirestoreInitialization();
     return withRetry(async () => {
       try {
         if (!id) {

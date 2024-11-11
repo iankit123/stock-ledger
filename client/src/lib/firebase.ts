@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -10,7 +10,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase with persistent cache
+// Initialize Firebase
 let app;
 try {
   app = initializeApp(firebaseConfig);
@@ -19,21 +19,13 @@ try {
   throw error;
 }
 
-// Initialize Firestore with improved configuration
+// Initialize Firestore with basic configuration
 let db;
 try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager()
-    }),
-    experimentalForceLongPolling: true,
-    experimentalAutoDetectLongPolling: true,
-    cacheSizeBytes: 50 * 1024 * 1024 // 50 MB cache size
-  });
+  db = getFirestore(app);
 } catch (error) {
   console.error('Error initializing Firestore:', error);
-  // Fallback to basic configuration
-  db = getFirestore(app);
+  throw error;
 }
 
 export { db };

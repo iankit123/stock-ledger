@@ -315,6 +315,10 @@ export default function StockDashboard() {
                             <th className="text-right p-4 font-medium text-muted-foreground">Target/Stop Loss</th>
                             <th className="text-left p-4 font-medium text-muted-foreground">R/R & Confidence</th>
                             <th className="text-left p-4 font-medium text-muted-foreground">Reason</th>
+                            <th className="text-left p-4 font-medium text-muted-foreground">Sell Date</th>
+                            <th className="text-right p-4 font-medium text-muted-foreground">Sell Price</th>
+                            <th className="text-right p-4 font-medium text-muted-foreground">Profit/Loss</th>
+                            <th className="text-right p-4 font-medium text-muted-foreground">Target/SL Hit</th>
                             <th className="text-right p-4 font-medium text-muted-foreground">Actions</th>
                           </tr>
                         </thead>

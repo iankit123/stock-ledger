@@ -33,22 +33,19 @@ export default function StockLedgerEntry({
   const { data: liveData } = useSWR(
     `/api/stock/${entry.symbol}`,
     {
-      refreshInterval: 10000 // Refresh every 10 seconds
+      refreshInterval: 10000
     }
   );
 
   const currentPrice = liveData?.chart?.result?.[0]?.meta?.regularMarketPrice;
   const priceChange = currentPrice ? ((currentPrice - entry.priceBuy) / entry.priceBuy) * 100 : null;
 
-  // Calculate if target or stop loss is hit
   const targetPrice = entry.priceBuy * (1 + entry.targetPercent / 100);
   const stopLossPrice = entry.priceBuy * (1 - entry.stopLossPercent / 100);
   const hitTarget = currentPrice ? currentPrice >= targetPrice : false;
   const hitStopLoss = currentPrice ? currentPrice <= stopLossPrice : false;
 
-  // Calculate R/R ratio
   const riskRewardRatio = (entry.targetPercent / entry.stopLossPercent).toFixed(2);
-
   const formattedCurrency = entry.symbol.endsWith('.NS') ? '₹' : '$';
 
   const handleSellSubmit = async (sellDetails: Pick<StockEntry, 'dateSell' | 'priceSell'>) => {
@@ -106,15 +103,7 @@ export default function StockLedgerEntry({
               <span className="text-muted-foreground">Loading...</span>
             )
           ) : (
-            <div className="flex flex-col items-end">
-              <span>{formattedCurrency}{entry.priceSell?.toFixed(2)}</span>
-              <span className={cn(
-                "text-sm",
-                entry.profitLoss && entry.profitLoss >= 0 ? "text-green-600" : "text-red-600"
-              )}>
-                {entry.profitLoss ? `${((entry.profitLoss / entry.priceBuy) * 100).toFixed(2)}%` : ''}
-              </span>
-            </div>
+            <span className="text-muted-foreground">Closed</span>
           )}
         </td>
 
@@ -162,6 +151,35 @@ export default function StockLedgerEntry({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+        </td>
+
+        {/* Sell Date */}
+        <td className="p-4">
+          {entry.dateSell ? new Date(entry.dateSell).toLocaleDateString() : '-'}
+        </td>
+
+        {/* Sell Price */}
+        <td className="p-4 text-right">
+          {entry.priceSell ? `${formattedCurrency}${entry.priceSell.toFixed(2)}` : '-'}
+        </td>
+
+        {/* Profit/Loss */}
+        <td className="p-4 text-right">
+          {entry.priceSell ? (
+            <span className={entry.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}>
+              {formattedCurrency}{Math.abs(entry.profitLoss).toFixed(2)}
+              ({((entry.profitLoss / entry.priceBuy) * 100).toFixed(2)}%)
+            </span>
+          ) : '-'}
+        </td>
+
+        {/* Target/SL Hit */}
+        <td className="p-4 text-right">
+          {entry.status === 'Closed' ? (
+            <span className={entry.hitTarget ? 'text-green-600' : (entry.hitStopLoss ? 'text-red-600' : 'text-muted-foreground')}>
+              {entry.hitTarget ? 'Target Hit' : (entry.hitStopLoss ? 'SL Hit' : 'Closed')}
+            </span>
+          ) : '-'}
         </td>
 
         {/* Actions */}

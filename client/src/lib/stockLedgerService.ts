@@ -10,15 +10,13 @@ import {
   Timestamp,
   DocumentData,
   FirestoreError,
-  getFirestore
 } from 'firebase/firestore';
-import { db, isFirebaseInitialized, reinitializeFirebase, getInitializationError } from './firebase';
+import { db } from './firebase';
 import type { NewStockEntry, StockEntry } from '@/types/ledger';
 
 const COLLECTION_NAME = 'stockEntries';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
-const MAX_INITIALIZATION_ATTEMPTS = 3;
 
 // Helper function for delay between retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -52,37 +50,12 @@ function safeConsoleLog(message: string, error?: unknown) {
   }
 }
 
-// Check and handle Firebase connection with multiple attempts
-async function ensureFirebaseConnection(): Promise<void> {
-  for (let attempt = 0; attempt < MAX_INITIALIZATION_ATTEMPTS; attempt++) {
-    if (isFirebaseInitialized()) {
-      return;
-    }
-
-    try {
-      await reinitializeFirebase();
-      return;
-    } catch (error) {
-      const initError = getInitializationError();
-      safeConsoleLog(`Firebase initialization attempt ${attempt + 1} failed:`, initError);
-      
-      if (attempt === MAX_INITIALIZATION_ATTEMPTS - 1) {
-        throw new Error(`Firebase initialization failed after ${MAX_INITIALIZATION_ATTEMPTS} attempts: ${initError?.message || 'Unknown error'}`);
-      }
-      
-      await delay(RETRY_DELAY * Math.pow(2, attempt));
-    }
-  }
-}
-
-// Retry wrapper for Firestore operations with connection check
+// Retry wrapper for Firestore operations
 async function withRetry<T>(
   operation: () => Promise<T>,
   operationName: string,
   maxRetries: number = MAX_RETRIES
 ): Promise<T> {
-  await ensureFirebaseConnection();
-  
   let lastError: unknown;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -92,30 +65,17 @@ async function withRetry<T>(
       lastError = error;
       
       if (error instanceof FirestoreError) {
-        // Check for connection-related errors
-        if (error.code === 'unavailable' || error.code === 'failed-precondition') {
-          safeConsoleLog(`Connection error during ${operationName}, attempting to reinitialize Firebase`);
-          try {
-            await reinitializeFirebase();
-          } catch (reinitError) {
-            safeConsoleLog('Failed to reinitialize Firebase', reinitError);
-          }
-        }
-        
-        // Don't retry for these errors
-        if (error.code === 'permission-denied' || 
-            error.code === 'not-found' || 
-            error.code === 'invalid-argument') {
+        // Only retry on connection-related errors
+        if (error.code !== 'unavailable' && 
+            error.code !== 'failed-precondition') {
           throw error;
         }
       }
       
       if (attempt === maxRetries) {
-        safeConsoleLog(`Failed ${operationName} after ${maxRetries} attempts:`, error);
         throw error;
       }
       
-      // Wait before retrying, with exponential backoff
       await delay(RETRY_DELAY * Math.pow(2, attempt - 1));
       safeConsoleLog(`Retrying ${operationName} (attempt ${attempt + 1}/${maxRetries})`);
     }

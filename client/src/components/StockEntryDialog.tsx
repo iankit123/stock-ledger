@@ -25,7 +25,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { format } from "date-fns";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { CalendarIcon, Loader2, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -41,13 +41,33 @@ interface StockEntryDialogProps {
 export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = false }: StockEntryDialogProps) {
   const [date, setDate] = useState<Date>(new Date());
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; name: string } | null>(null);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, signIn } = useAuth();
 
   const resetForm = (form: HTMLFormElement) => {
     form.reset();
     setSelectedStock(null);
     setDate(new Date());
+  };
+
+  const handleSignIn = async () => {
+    try {
+      setIsSigningIn(true);
+      await signIn();
+      toast({
+        title: "Success",
+        description: "Successfully signed in with Google",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to sign in with Google"
+      });
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -148,6 +168,23 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
               You must be signed in to add entries to the stock ledger.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex flex-col gap-4 mt-4">
+            <p className="text-sm text-muted-foreground">
+              Please sign in with your Google account to continue.
+            </p>
+            <Button 
+              onClick={handleSignIn} 
+              disabled={isSigningIn}
+              className="w-full"
+            >
+              {isSigningIn ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogIn className="mr-2 h-4 w-4" />
+              )}
+              Sign in with Google
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     );

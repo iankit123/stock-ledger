@@ -1,7 +1,6 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 
-// Firebase configuration using environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -11,7 +10,7 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase synchronously
+// Initialize Firebase with persistent cache
 let app;
 try {
   app = initializeApp(firebaseConfig);
@@ -20,15 +19,20 @@ try {
   throw error;
 }
 
-// Initialize Firestore with long polling for production stability
+// Initialize Firestore with improved configuration
 let db;
 try {
   db = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    }),
     experimentalForceLongPolling: true,
-    useFetchStreams: false
+    experimentalAutoDetectLongPolling: true,
+    cacheSizeBytes: 50 * 1024 * 1024 // 50 MB cache size
   });
 } catch (error) {
   console.error('Error initializing Firestore:', error);
+  // Fallback to basic configuration
   db = getFirestore(app);
 }
 

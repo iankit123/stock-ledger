@@ -15,11 +15,13 @@ import { db } from './firebase';
 import type { NewStockEntry, StockEntry } from '@/types/ledger';
 
 const COLLECTION_NAME = 'stockEntries';
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
+const MAX_RETRIES = process.env.NODE_ENV === 'production' ? 5 : 3;
+const RETRY_DELAY = process.env.NODE_ENV === 'production' ? 2000 : 1000; // 2 seconds for production, 1 second for development
 
 // Helper function for delay between retries
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number, attempt: number) => new Promise(resolve => 
+  setTimeout(resolve, ms * Math.pow(2, attempt - 1))
+);
 
 // Serialize error objects for safe logging
 function serializeError(error: unknown): string {
@@ -76,7 +78,7 @@ async function withRetry<T>(
         throw error;
       }
       
-      await delay(RETRY_DELAY * Math.pow(2, attempt - 1));
+      await delay(RETRY_DELAY, attempt);
       safeConsoleLog(`Retrying ${operationName} (attempt ${attempt + 1}/${maxRetries})`);
     }
   }

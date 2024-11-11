@@ -11,6 +11,7 @@ export interface StockEntry {
   riskReward?: number;  // Made optional
   reason: string;
   chartLink?: string;
+  source: string;  // Added source field
   confidence: 'Low' | 'Medium' | 'High';
   profitLoss?: number;
   hitTarget?: boolean;

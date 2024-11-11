@@ -84,6 +84,11 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
         throw new Error('Please enter a valid chart link starting with http:// or https://');
       }
 
+      const source = (formData.get('source') as string)?.trim();
+      if (!source) {
+        throw new Error('Please enter the source');
+      }
+
       const confidence = formData.get('confidence') as 'Low' | 'Medium' | 'High';
       if (!confidence) {
         throw new Error('Please select a confidence level');
@@ -98,6 +103,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
         stopLossPercent,
         reason,
         chartLink: chartLink || undefined,
+        source,
         confidence,
       };
 
@@ -248,6 +254,18 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
               type="url"
               disabled={isLoading}
               placeholder="https://..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="source">Source</Label>
+            <Input
+              id="source"
+              name="source"
+              type="text"
+              disabled={isLoading}
+              placeholder="Enter source (e.g., Telegram channel, News, Analysis)"
+              required
             />
           </div>
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { Edit2, Trash2, ExternalLink, DollarSign } from 'lucide-react';
+import { Edit2, Trash2, ExternalLink, DollarSign, User } from 'lucide-react';
 import type { StockEntry } from '@/types/ledger';
 import { cn } from "@/lib/utils";
 import useSWR from 'swr';
@@ -73,6 +73,17 @@ export default function StockLedgerEntry({
           <div className="flex flex-col">
             <span className="font-medium">{entry.stockName}</span>
             <span className="text-sm text-muted-foreground">{entry.symbol}</span>
+          </div>
+        </td>
+
+        {/* Added By */}
+        <td className="p-4">
+          <div className="flex items-center gap-2">
+            <User className="h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-col">
+              <span className="text-sm">{entry.addedBy.displayName || 'User'}</span>
+              <span className="text-xs text-muted-foreground">{entry.addedBy.email}</span>
+            </div>
           </div>
         </td>
 

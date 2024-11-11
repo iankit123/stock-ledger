@@ -6,6 +6,7 @@ import { SWRConfig } from "swr";
 import { fetcher } from "./lib/fetcher";
 import StockDashboard from "./pages/StockDashboard";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider } from "./contexts/AuthContext";
 
 // SWR configuration with consistent loading states
 const swrConfig = {
@@ -47,12 +48,14 @@ const swrConfig = {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <SWRConfig value={swrConfig}>
-      <Switch>
-        <Route path="/" component={StockDashboard} />
-        <Route>404 Page Not Found</Route>
-      </Switch>
-      <Toaster />
-    </SWRConfig>
+    <AuthProvider>
+      <SWRConfig value={swrConfig}>
+        <Switch>
+          <Route path="/" component={StockDashboard} />
+          <Route>404 Page Not Found</Route>
+        </Switch>
+        <Toaster />
+      </SWRConfig>
+    </AuthProvider>
   </StrictMode>
 );

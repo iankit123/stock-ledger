@@ -21,6 +21,11 @@ export interface StockEntry {
   status: 'Active' | 'Closed';
   createdAt: string;
   updatedAt: string;
+  addedBy: {
+    uid: string;
+    email: string;
+    displayName: string | null;
+  };
 }
 
 export type NewStockEntry = Omit<

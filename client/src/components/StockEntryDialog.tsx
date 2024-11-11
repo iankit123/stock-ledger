@@ -28,6 +28,7 @@ import { format } from "date-fns";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import type { NewStockEntry } from "@/types/ledger";
 
 interface StockEntryDialogProps {
@@ -41,6 +42,7 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
   const [date, setDate] = useState<Date>(new Date());
   const [selectedStock, setSelectedStock] = useState<{ symbol: string; name: string } | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const resetForm = (form: HTMLFormElement) => {
     form.reset();
@@ -53,6 +55,10 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
     const form = e.currentTarget;
 
     try {
+      if (!user) {
+        throw new Error('You must be signed in to add entries');
+      }
+
       if (!selectedStock) {
         throw new Error('Please select a stock first');
       }
@@ -105,6 +111,11 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
         chartLink: chartLink || undefined,
         source,
         confidence,
+        addedBy: {
+          uid: user.uid,
+          email: user.email!,
+          displayName: user.displayName
+        }
       };
 
       await onSubmit(entry);
@@ -126,6 +137,21 @@ export default function StockEntryDialog({ open, onClose, onSubmit, isLoading = 
       onClose();
     }
   };
+
+  if (!user) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Authentication Required</DialogTitle>
+            <DialogDescription>
+              You must be signed in to add entries to the stock ledger.
+            </DialogDescription>
+          </DialogHeader>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>

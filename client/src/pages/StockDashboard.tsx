@@ -310,6 +310,7 @@ export default function StockDashboard() {
                           <tr className="border-b bg-muted/50">
                             <th className="text-center p-4 w-16 bg-muted/50 font-medium text-muted-foreground">SR No.</th>
                             <th className="text-left p-4 font-medium text-muted-foreground">Stock</th>
+                            <th className="text-left p-4 font-medium text-muted-foreground">Added By</th>
                             <th className="text-left p-4 font-medium text-muted-foreground">Buy Info</th>
                             <th className="text-right p-4 font-medium text-muted-foreground">Current</th>
                             <th className="text-right p-4 font-medium text-muted-foreground">Target/Stop Loss</th>

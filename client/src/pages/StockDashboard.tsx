@@ -75,6 +75,7 @@ export default function StockDashboard() {
   const [showAddEntry, setShowAddEntry] = useState(false);
   const [activeTab, setActiveTab] = useState("live");
   const [isLoading, setIsLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -92,13 +93,6 @@ export default function StockDashboard() {
           setStockEntries(entries);
         }
       } catch (err) {
-        console.error('Failed to load stock entries:', {
-          error: err instanceof Error ? {
-            message: err.message,
-            stack: err.stack
-          } : String(err)
-        });
-
         if (mounted) {
           const errorMessage = formatErrorMessage(err);
           setError('Failed to load stock entries. ' + errorMessage);
@@ -111,6 +105,7 @@ export default function StockDashboard() {
       } finally {
         if (mounted) {
           setIsLoading(false);
+          setIsInitializing(false);
         }
       }
     };
@@ -220,6 +215,17 @@ export default function StockDashboard() {
       });
     }
   };
+
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <p className="text-muted-foreground">Initializing application...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>

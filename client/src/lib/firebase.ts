@@ -1,5 +1,5 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, initializeFirestore } from 'firebase/firestore';
+import { initializeApp, getApp } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -10,12 +10,21 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+// Initialize Firebase with error handling
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+} catch (error: any) {
+  if (error.code === 'app/duplicate-app') {
+    // Get the existing app if it's already initialized
+    app = getApp();
+  } else {
+    console.error('Firebase initialization error:', error);
+    throw error;
+  }
+}
 
-// Initialize Firestore with specific settings for better cross-environment compatibility
-const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-});
+// Initialize Firestore with basic configuration
+const db = getFirestore(app);
 
 export { db };

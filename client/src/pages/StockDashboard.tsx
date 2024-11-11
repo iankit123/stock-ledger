@@ -326,6 +326,48 @@ export default function StockDashboard() {
                               index={index}
                               onEdit={handleEditEntry}
                               onDelete={handleDeleteEntry}
+                              onAddSellDetails={async (id, sellDetails) => {
+                                try {
+                                  const entryToUpdate = stockEntries.find(e => e.id === id);
+                                  if (!entryToUpdate) {
+                                    throw new Error('Entry not found');
+                                  }
+
+                                  const updatedEntry = {
+                                    ...entryToUpdate,
+                                    ...sellDetails,
+                                    status: 'Closed' as const,
+                                    profitLoss: sellDetails.priceSell - entryToUpdate.priceBuy,
+                                    hitTarget: sellDetails.priceSell >= entryToUpdate.priceBuy * (1 + entryToUpdate.targetPercent / 100),
+                                    hitStopLoss: sellDetails.priceSell <= entryToUpdate.priceBuy * (1 - entryToUpdate.stopLossPercent / 100)
+                                  };
+
+                                  await stockLedgerService.updateEntry(id, updatedEntry);
+                                  
+                                  setStockEntries(entries => 
+                                    entries.map(e => e.id === id ? updatedEntry : e)
+                                  );
+                                  
+                                  toast({
+                                    title: "Success",
+                                    description: `Added sell details for ${updatedEntry.stockName}`,
+                                  });
+                                } catch (err) {
+                                  const errorMessage = formatErrorMessage(err);
+                                  console.error('Failed to add sell details:', {
+                                    error: err instanceof Error ? {
+                                      message: err.message,
+                                      stack: err.stack
+                                    } : String(err)
+                                  });
+                                  
+                                  toast({
+                                    variant: "destructive",
+                                    title: "Error",
+                                    description: errorMessage
+                                  });
+                                }
+                              }}
                             />
                           ))}
                         </tbody>
